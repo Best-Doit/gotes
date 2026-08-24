@@ -1,0 +1,56 @@
+<tr x-data="productPicker()" @click.outside="close()" @scroll.window="positionMenu()" @resize.window="positionMenu()">
+  <td><span class="font-medium text-base-content/65" x-text="selectedCode || '—'">—</span></td>
+  <td>
+    {{ item_form.id }}
+    <label class="sr-only" for="product-search-{{ item_form.prefix }}">Producto</label>
+    <div class="relative">
+      <input
+        id="product-search-{{ item_form.prefix }}"
+        type="search"
+        placeholder="Escribe nombre o código"
+        autocomplete="off"
+        class="input input-sm w-full"
+        x-ref="search"
+        x-model="query"
+        @focus="show()"
+        @input="search()"
+        @keydown.arrow-down.prevent="move(1)"
+        @keydown.arrow-up.prevent="move(-1)"
+        @keydown.enter.prevent="chooseActive()"
+        @keydown.escape="close()"
+        role="combobox"
+        aria-autocomplete="list"
+        :aria-expanded="open"
+        {% if item_form.product.errors %}aria-invalid="true"{% endif %}
+      >
+      <div class="hidden" x-ref="nativeSelect">{{ item_form.product }}</div>
+      <ul
+        x-cloak
+        x-show="open"
+        x-bind:style="menuStyle"
+        class="menu menu-sm fixed z-[70] max-h-56 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
+        role="listbox"
+      >
+        <template x-for="(product, index) in matches" :key="product.value">
+          <li>
+            <button
+              type="button"
+              class="min-h-8 justify-start px-2 py-1.5 text-left"
+              :class="index === activeIndex ? 'menu-active bg-primary/10 text-primary' : ''"
+              @mouseenter="activeIndex = index"
+              @mousedown.prevent
+              @click="choose(product)"
+              role="option"
+              :aria-selected="index === activeIndex"
+            ><span class="truncate" x-text="product.name"></span></button>
+          </li>
+        </template>
+        <li x-show="matches.length === 0"><span class="px-2 py-2 text-xs text-base-content/50">Sin coincidencias</span></li>
+      </ul>
+    </div>
+  </td>
+  <td><label class="sr-only" for="{{ item_form.quantity_sent.id_for_label }}">Cantidad</label>{{ item_form.quantity_sent }}</td>
+  <td><label class="sr-only" for="{{ item_form.send_note.id_for_label }}">Observación</label>{{ item_form.send_note }}</td>
+  <td class="text-center">{% if item_form.instance.pk %}<label class="label cursor-pointer justify-center gap-2"><span class="sr-only">Quitar producto</span>{{ item_form.DELETE }}</label>{% else %}<span class="text-base-content/25">—</span>{% endif %}</td>
+</tr>
+{% if item_form.errors %}<tr><td colspan="5"><div role="alert" class="alert alert-error alert-soft py-2 text-sm">{{ item_form.errors }}</div></td></tr>{% endif %}

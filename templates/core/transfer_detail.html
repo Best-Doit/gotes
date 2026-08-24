@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% load core_tags %}
+{% block title %}{{ transfer.code }} · GOTES{% endblock %}
+{% block content %}
+<section class="min-w-0" aria-labelledby="products-table-title">
+  <header class="flex flex-wrap items-center justify-between gap-2 border-b border-base-300 px-1 pb-3">
+    <div>
+      <h2 id="products-table-title" class="text-base font-black">Productos enviados</h2>
+      <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-base-content/50">
+        <span>{{ transfer.code }} · {{ transfer.origin.name }}</span>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 12h14m-4-4 4 4-4 4" /></svg>
+        <span>{{ transfer.destination.name }}</span>
+      </div>
+    </div>
+    <button type="button" class="btn btn-info btn-soft btn-sm" onclick="document.getElementById('transfer-flow-modal').showModal()" aria-controls="transfer-flow-modal">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" /><circle cx="12" cy="12" r="2.5" /></svg>
+      Ver más detalle
+    </button>
+  </header>
+  <div class="overflow-x-auto pb-2">
+    <table class="table premium-table table-sm">
+      <thead><tr><th>Código</th><th>Producto</th><th>Categoría</th><th>Observación</th><th class="text-right">Cantidad</th></tr></thead>
+      <tbody>
+        {% for item in transfer.items.all %}
+        <tr><td class="font-semibold">{{ item.product.code }}</td><td class="font-bold">{{ item.product.name }}</td><td class="text-sm text-base-content/55">{{ item.product.category }}</td><td class="max-w-56 text-sm text-base-content/60">{{ item.send_note|default:"—" }}</td><td class="text-right font-black">{{ item.quantity_sent }}</td></tr>
+        {% empty %}<tr><td colspan="5" class="py-10 text-center text-base-content/50">No hay productos registrados.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<dialog id="transfer-flow-modal" class="modal modal-middle" aria-labelledby="transfer-flow-title">
+  <div class="modal-box premium-modal flex max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-2xl flex-col overflow-hidden p-0 sm:max-h-[88dvh] sm:w-full">
+    <header class="flex items-start justify-between gap-3 border-b border-base-300 px-4 py-3">
+      <div class="min-w-0">
+        <p class="text-[.65rem] font-bold uppercase tracking-[.08em] text-primary/70">Flujo del movimiento</p>
+        <div class="mt-0.5 flex flex-wrap items-center gap-2"><h2 id="transfer-flow-title" class="truncate text-lg font-black">{{ transfer.code }}</h2><span class="badge {{ transfer.status|status_daisy }} badge-sm whitespace-nowrap">{{ transfer.get_status_display }}</span></div>
+        <div class="mt-0.5 flex items-center gap-1.5 text-xs text-base-content/55"><span class="truncate">{{ transfer.origin.name }}</span><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 12h14m-4-4 4 4-4 4" /></svg><span class="truncate">{{ transfer.destination.name }}</span></div>
+      </div>
+      <form method="dialog"><button class="modal-close btn btn-circle btn-ghost btn-sm" aria-label="Cerrar flujo"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6l12 12M18 6 6 18" /></svg></button></form>
+    </header>
+
+    <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
+      {% if transfer.status != 'CANCELLED' %}
+      <ul class="steps steps-horizontal mb-3 w-full text-[.65rem]" aria-label="Progreso del movimiento">
+        <li class="step step-primary">Borrador</li>
+        <li class="step {% if transfer.status != 'DRAFT' %}step-primary{% endif %}">Preparación</li>
+        <li class="step {% if transfer.status == 'DISPATCHED' or transfer.status == 'RECEIVING' or transfer.status == 'RECEIVED' or transfer.status == 'RECEIVED_DIFFERENCES' or transfer.status == 'CLOSED' %}step-primary{% endif %}">Salida</li>
+        <li class="step {% if transfer.status == 'RECEIVED' or transfer.status == 'RECEIVED_DIFFERENCES' or transfer.status == 'CLOSED' %}step-primary{% endif %}">Recepción</li>
+        <li class="step {% if transfer.status == 'CLOSED' %}step-primary{% endif %}">Cierre</li>
+      </ul>
+      {% endif %}
+
+      {% if transfer.status == 'CANCELLED' %}
+      <div role="alert" class="alert alert-error alert-soft"><span class="status status-error"></span><div><div class="font-bold">Movimiento anulado</div><p class="text-sm">{{ transfer.cancellation_reason|default:"El traspaso fue cancelado." }}</p></div></div>
+      {% elif request.user.is_operational %}
+      <section class="border-b border-base-300 pb-3" aria-labelledby="next-step-title">
+        {% if draft_just_saved %}<div role="status" class="mb-2 flex items-center gap-2 text-xs font-semibold text-success"><span class="status status-success"></span>Borrador guardado correctamente</div>{% endif %}
+        <p class="text-[.65rem] font-bold uppercase tracking-[.06em] text-base-content/45">Siguiente paso</p>
+        <h3 id="next-step-title" class="mt-0.5 text-base font-black">
+          {% if request.user.branch_id == transfer.origin_id and transfer.status == 'DRAFT' %}Confirmar preparación
+          {% elif request.user.branch_id == transfer.origin_id and transfer.status == 'PREPARED' and not has_dispatch_evidence %}Adjuntar evidencia de salida
+          {% elif request.user.branch_id == transfer.origin_id and transfer.status == 'PREPARED' %}Confirmar salida
+          {% elif request.user.branch_id == transfer.destination_id and transfer.status == 'DISPATCHED' or request.user.branch_id == transfer.destination_id and transfer.status == 'RECEIVING' %}Registrar recepción
+          {% elif transfer.status == 'RECEIVED' or transfer.status == 'RECEIVED_DIFFERENCES' %}Completar el cierre
+          {% else %}Seguimiento en curso{% endif %}
+        </h3>
+        <div class="mt-2 flex flex-wrap gap-1.5">
+          {% if request.user.branch_id == transfer.origin_id and transfer.status == 'DRAFT' %}
+          <form method="post" action="{% url 'transfer_prepare' transfer.uuid %}">{% csrf_token %}<button class="btn action-button btn-primary btn-sm">Confirmar preparación</button></form>
+          <a href="{% url 'transfer_edit' transfer.uuid %}" class="btn btn-info btn-soft btn-sm">Editar borrador</a>
+          {% endif %}
+          {% if request.user.branch_id == transfer.origin_id and transfer.status == 'PREPARED' %}
+            {% if not can_dispatch_transfer %}
+            <div role="alert" class="alert alert-warning alert-soft w-full py-2 text-sm"><span class="status status-warning"></span><span>Tu asignación no tiene permiso para confirmar salidas.</span></div>
+            {% elif has_dispatch_evidence %}
+            <button type="button" class="btn action-button btn-primary btn-sm" onclick="openTransferSubflow('dispatch-confirm-modal')">Confirmar salida</button>
+            <button type="button" class="btn btn-info btn-soft btn-sm" onclick="openTransferSubflow('evidence-modal')">Adjuntar otra evidencia</button>
+            {% else %}
+            <div role="alert" class="alert alert-warning alert-soft w-full py-2 text-sm"><span class="status status-warning"></span><span>Necesitas una evidencia de tipo <strong>Salida</strong> antes de despachar.</span></div>
+            <button type="button" class="btn action-button btn-warning btn-sm" onclick="openTransferSubflow('evidence-modal')">Adjuntar evidencia</button>
+            {% endif %}
+            <button type="button" class="btn btn-warning btn-soft btn-sm" onclick="openTransferSubflow('return-draft-modal')">Volver a borrador</button>
+          {% endif %}
+          {% if request.user.branch_id == transfer.destination_id and transfer.status == 'DISPATCHED' or request.user.branch_id == transfer.destination_id and transfer.status == 'RECEIVING' %}<a href="{% url 'receipt_edit' transfer.uuid %}?flow=1" class="btn action-button btn-primary btn-sm">Abrir recepción</a>{% endif %}
+          {% if request.user|can:"close" %}{% if transfer.status == 'RECEIVED' or transfer.status == 'RECEIVED_DIFFERENCES' %}<button type="button" class="btn action-button btn-success btn-sm" onclick="openTransferSubflow('close-confirm-modal')">Cerrar traspaso</button>{% endif %}{% endif %}
+          {% if allowed_evidence_types %}{% if request.user.branch_id != transfer.origin_id or transfer.status != 'PREPARED' %}<button type="button" class="btn btn-info btn-soft btn-sm" onclick="openTransferSubflow('evidence-modal')">Adjuntar evidencia</button>{% endif %}{% endif %}
+          {% if request.user|can:"cancel" %}{% if transfer.status != 'CLOSED' and transfer.status != 'CANCELLED' %}<button type="button" class="btn btn-error btn-soft btn-sm" onclick="openTransferSubflow('cancel-transfer-modal')">Anular movimiento</button>{% endif %}{% endif %}
+        </div>
+      </section>
+      {% endif %}
+
+      <div class="mt-3 grid gap-3 md:grid-cols-2 md:divide-x md:divide-base-300">
+        <section aria-labelledby="summary-title">
+          <h3 id="summary-title" class="text-sm font-black">Resumen</h3>
+          <dl class="mt-2 grid grid-cols-2 gap-2 text-xs">
+            <div><dt class="text-xs text-base-content/45">Origen</dt><dd class="font-semibold">{{ transfer.origin.code }}</dd></div><div><dt class="text-xs text-base-content/45">Destino</dt><dd class="font-semibold">{{ transfer.destination.code }}</dd></div>
+            <div><dt class="text-xs text-base-content/45">Creado</dt><dd class="font-semibold">{{ transfer.created_at|date:"d/m/Y H:i" }}</dd></div><div><dt class="text-xs text-base-content/45">Productos</dt><dd class="font-semibold">{{ transfer.items.count }} líneas</dd></div>
+            <div class="col-span-2"><dt class="text-xs text-base-content/45">Creado por</dt><dd class="font-semibold">{{ transfer.created_by }}</dd></div>{% if transfer.notes %}<div class="col-span-2"><dt class="text-xs text-base-content/45">Nota general</dt><dd>{{ transfer.notes }}</dd></div>{% endif %}
+          </dl>
+        </section>
+        <section class="md:pl-3" aria-labelledby="evidence-title">
+          <div class="flex items-center justify-between gap-2"><h3 id="evidence-title" class="text-sm font-black">Evidencias</h3><span class="badge badge-neutral badge-outline badge-sm">{{ transfer.evidences.count }}</span></div>
+          <div class="mt-1 divide-y divide-base-300">
+            {% for evidence in transfer.evidences.all %}<a href="{% url 'evidence_download' evidence.uuid %}" target="_blank" class="flex items-center justify-between gap-2 py-1.5 text-xs"><span class="min-w-0"><span class="block font-bold">{{ evidence.get_type_display }}</span><span class="block truncate text-[.68rem] text-base-content/45">{{ evidence.original_name }}</span></span><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 5h5v5m0-5-9 9M19 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4" /></svg></a>{% empty %}<p class="py-2 text-xs text-base-content/50">Todavía no hay archivos adjuntos.</p>{% endfor %}
+          </div>
+        </section>
+      </div>
+
+      {% if transfer.receipt %}<section class="mt-3 border-t border-base-300 pt-3" aria-labelledby="receipt-title"><h3 id="receipt-title" class="mb-1 text-sm font-black">Recepción</h3><div class="overflow-x-auto"><table class="table table-xs"><thead><tr><th>Producto</th><th>Condición</th><th class="text-right">Recibido</th></tr></thead><tbody>{% for item in transfer.receipt.items.all %}<tr><td class="font-bold">{{ item.product.name }}</td><td>{% if item.is_damaged %}<span class="badge badge-error badge-outline badge-sm">Dañado</span>{% elif item.is_unexpected %}<span class="badge badge-warning badge-outline badge-sm">No enviado</span>{% else %}<span class="badge badge-success badge-outline badge-sm">Conforme</span>{% endif %}</td><td class="text-right font-black">{{ item.quantity_received }}</td></tr>{% endfor %}</tbody></table></div></section>{% endif %}
+
+      {% if transfer.incident %}
+      <section class="mt-3 border-t border-base-300 pt-3" aria-labelledby="incident-title">
+        <div class="flex flex-wrap items-center justify-between gap-2"><h3 id="incident-title" class="text-sm font-black">{{ transfer.incident.code }}</h3><span class="badge {% if transfer.incident.status == 'RESOLVED' %}badge-success{% else %}badge-error{% endif %} badge-outline badge-sm">{{ transfer.incident.get_status_display }}</span></div>
+        <ul class="mt-1 divide-y divide-base-300 text-xs">{% for difference in transfer.incident.differences.all %}<li class="py-1.5"><span class="font-bold">{{ difference.product.name }}</span> · {{ difference.get_type_display }} · enviado {{ difference.quantity_sent }}, recibido {{ difference.quantity_received }}</li>{% endfor %}</ul>
+        {% if resolution_form and request.user|can:"resolve_incident" %}<form method="post" action="{% url 'incident_resolve' transfer.uuid %}" class="mt-3 grid gap-2 border-t border-base-300 pt-3 sm:grid-cols-2">{% csrf_token %}{% for field in resolution_form %}<fieldset class="fieldset"><legend class="fieldset-legend">{{ field.label }}</legend>{{ field }}</fieldset>{% endfor %}<div class="sm:col-span-2"><button class="btn btn-success btn-soft btn-sm">Registrar resolución</button></div></form>{% endif %}
+      </section>
+      {% endif %}
+
+      {% if transfer.commercial_registration or commercial_form %}
+      <section class="mt-3 border-t border-base-300 pt-3" aria-labelledby="commercial-title">
+        <div class="flex items-center justify-between gap-2">
+          <div><h3 id="commercial-title" class="text-sm font-black">Conciliación comercial</h3><p class="mt-0.5 text-xs text-base-content/50">Registra el identificador del movimiento en el sistema comercial.</p></div>
+          {% if transfer.commercial_registration %}<span class="badge badge-success badge-outline badge-sm">Registrado</span>{% endif %}
+        </div>
+        {% if transfer.commercial_registration %}
+        <dl class="mt-2 grid grid-cols-2 gap-3 text-xs">
+          <div><dt class="text-base-content/45">Referencia</dt><dd class="font-bold">{{ transfer.commercial_registration.external_reference }}</dd></div>
+          <div><dt class="text-base-content/45">Fecha</dt><dd class="font-bold">{{ transfer.commercial_registration.external_date|date:"d/m/Y" }}</dd></div>
+        </dl>
+        {% endif %}
+        {% if commercial_form and not is_commercial_correction %}
+        <form method="post" action="{% url 'commercial_register' transfer.uuid %}" class="mt-2">{% csrf_token %}
+          <div class="grid gap-2 sm:grid-cols-[minmax(12rem,1.4fr)_minmax(9rem,.7fr)]">
+            <fieldset class="fieldset py-0"><legend class="fieldset-legend">{{ commercial_form.external_reference.label }}</legend>{{ commercial_form.external_reference }}{% if commercial_form.external_reference.errors %}<p class="label text-error">{{ commercial_form.external_reference.errors|striptags }}</p>{% endif %}</fieldset>
+            <fieldset class="fieldset py-0"><legend class="fieldset-legend">{{ commercial_form.external_date.label }}</legend>{{ commercial_form.external_date }}{% if commercial_form.external_date.errors %}<p class="label text-error">{{ commercial_form.external_date.errors|striptags }}</p>{% endif %}</fieldset>
+          </div>
+          <details class="mt-2 border-t border-base-300 pt-2" {% if commercial_form.notes.value %}open{% endif %}>
+            <summary class="cursor-pointer text-xs font-semibold text-base-content/60">Agregar observación opcional</summary>
+            <fieldset class="fieldset mt-1 py-0"><legend class="fieldset-legend">{{ commercial_form.notes.label }}</legend>{{ commercial_form.notes }}{% if commercial_form.notes.errors %}<p class="label text-error">{{ commercial_form.notes.errors|striptags }}</p>{% endif %}</fieldset>
+          </details>
+          <div class="mt-2 flex justify-end"><button class="btn btn-success btn-soft btn-sm">{% include "core/_icon.html" with name="save" %}Registrar conciliación</button></div>
+        </form>
+        {% endif %}
+        {% if commercial_form and is_commercial_correction %}
+        <div class="mt-3 flex justify-end border-t border-base-300 pt-3"><button type="button" class="btn btn-warning btn-soft btn-sm" onclick="openTransferSubflow('commercial-correction-modal')">{% include "core/_icon.html" with name="edit" %}Corregir registro</button></div>
+        {% endif %}
+      </section>
+      {% endif %}
+
+      <section class="mt-3 border-t border-base-300 pt-3" aria-labelledby="history-title"><h3 id="history-title" class="text-sm font-black">Historial</h3><ol class="mt-1.5 space-y-1.5">{% for event in timeline %}<li class="border-l-2 border-base-300 pl-2.5 text-xs"><div class="font-semibold">{{ event.created_at|date:"d/m/Y H:i" }} · {{ event.user|default:"Sistema" }}</div><p class="text-base-content/60">{{ event.description }}</p></li>{% empty %}<li class="text-xs text-base-content/50">Sin eventos.</li>{% endfor %}</ol></section>
+    </div>
+    <footer class="flex flex-wrap items-center justify-between gap-2 border-t border-base-300 px-4 py-2"><a href="{% url 'transfer_list' %}" class="btn btn-ghost btn-xs">Volver a traspasos</a><form method="dialog"><button class="btn btn-soft btn-xs">Ver solo la tabla</button></form></footer>
+  </div>
+  <form method="dialog" class="modal-backdrop bg-neutral/20 backdrop-blur-[1px]"><button aria-label="Cerrar flujo">Cerrar</button></form>
+</dialog>
+
+{% if commercial_form and is_commercial_correction %}
+<dialog id="commercial-correction-modal" class="modal modal-middle" aria-labelledby="commercial-correction-title">
+  <div class="modal-box premium-modal max-w-lg p-0">
+    <header class="flex items-start justify-between gap-3 border-b border-base-300 px-4 py-3">
+      <div><p class="text-[.65rem] font-bold uppercase tracking-[.08em] text-warning/80">Flujo de corrección</p><h2 id="commercial-correction-title" class="mt-0.5 text-base font-black">Corregir conciliación comercial</h2><p class="mt-0.5 text-xs text-base-content/50">{{ transfer.code }} · el cambio quedará registrado en el historial.</p></div>
+      <button type="button" class="modal-close btn btn-circle btn-ghost btn-sm" onclick="closeTransferSubflow('commercial-correction-modal')" aria-label="Cerrar corrección">{% include "core/_icon.html" with name="close" %}</button>
+    </header>
+    <form method="post" action="{% url 'commercial_register' transfer.uuid %}" class="p-4">{% csrf_token %}
+      <div class="grid gap-2 sm:grid-cols-[minmax(12rem,1.4fr)_minmax(9rem,.7fr)]">
+        <fieldset class="fieldset py-0"><legend class="fieldset-legend">{{ commercial_form.external_reference.label }}</legend>{{ commercial_form.external_reference }}{% if commercial_form.external_reference.errors %}<p class="label text-error">{{ commercial_form.external_reference.errors|striptags }}</p>{% endif %}</fieldset>
+        <fieldset class="fieldset py-0"><legend class="fieldset-legend">{{ commercial_form.external_date.label }}</legend>{{ commercial_form.external_date }}{% if commercial_form.external_date.errors %}<p class="label text-error">{{ commercial_form.external_date.errors|striptags }}</p>{% endif %}</fieldset>
+      </div>
+      <fieldset class="fieldset mt-2 py-0"><legend class="fieldset-legend">{{ commercial_form.correction_reason.label }}</legend>{{ commercial_form.correction_reason }}<p class="label text-xs">Obligatorio para conservar el historial de la corrección.</p>{% if commercial_form.correction_reason.errors %}<p class="label text-error">{{ commercial_form.correction_reason.errors|striptags }}</p>{% endif %}</fieldset>
+      <details class="mt-2 border-t border-base-300 pt-2" {% if commercial_form.notes.value %}open{% endif %}>
+        <summary class="cursor-pointer text-xs font-semibold text-base-content/60">Editar observación opcional</summary>
+        <fieldset class="fieldset mt-1 py-0"><legend class="fieldset-legend">{{ commercial_form.notes.label }}</legend>{{ commercial_form.notes }}{% if commercial_form.notes.errors %}<p class="label text-error">{{ commercial_form.notes.errors|striptags }}</p>{% endif %}</fieldset>
+      </details>
+      <div class="modal-action mt-3"><button type="button" class="btn btn-ghost btn-sm" onclick="closeTransferSubflow('commercial-correction-modal')">Cancelar</button><button class="btn btn-warning btn-soft btn-sm">{% include "core/_icon.html" with name="save" %}Guardar corrección</button></div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop bg-neutral/20 backdrop-blur-[1px]"><button aria-label="Cerrar corrección">Cerrar</button></form>
+</dialog>
+{% endif %}
+
+{% if allowed_evidence_types %}
+<dialog id="evidence-modal" class="modal modal-middle" aria-labelledby="evidence-modal-title">
+  <div class="modal-box premium-modal max-w-xl p-0">
+    <header class="flex items-start justify-between gap-3 border-b border-base-300 px-4 py-3"><div><p class="text-[.65rem] font-bold uppercase tracking-[.08em] text-primary/70">{{ transfer.code }}</p><h2 id="evidence-modal-title" class="mt-0.5 text-base font-black">Adjuntar evidencia</h2></div><form method="dialog"><button class="modal-close btn btn-circle btn-ghost btn-sm" aria-label="Cerrar"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6l12 12M18 6 6 18" /></svg></button></form></header>
+    <form method="post" enctype="multipart/form-data" action="{% url 'upload_evidence' transfer.uuid %}" class="p-4">{% csrf_token %}
+      {% if transfer.status == 'PREPARED' and request.user.branch_id == transfer.origin_id and not has_dispatch_evidence %}<div role="alert" class="alert alert-info alert-soft mb-3 py-2 text-sm"><span class="status status-info"></span><span>Salida está preseleccionada para habilitar el despacho.</span></div>{% endif %}
+      <div class="grid gap-3 sm:grid-cols-2">{% for field in evidence_form %}<fieldset class="fieldset min-w-0 {% if forloop.last %}sm:col-span-2{% endif %}"><legend class="fieldset-legend">{{ field.label }}</legend>{{ field }}{% if field.help_text %}<p class="label block text-xs">{{ field.help_text }}</p>{% endif %}{% if field.errors %}<div class="label text-error">{{ field.errors|striptags }}</div>{% endif %}</fieldset>{% endfor %}</div>
+      <div class="modal-action"><button type="button" class="btn btn-ghost btn-sm" onclick="closeTransferSubflow('evidence-modal')">Cancelar</button><button class="btn action-button btn-success btn-sm">Guardar evidencia</button></div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop bg-neutral/20 backdrop-blur-[1px]"><button aria-label="Cerrar evidencia">Cerrar</button></form>
+</dialog>
+{% endif %}
+
+{% if transfer.status == 'PREPARED' and has_dispatch_evidence and can_dispatch_transfer %}<dialog id="dispatch-confirm-modal" class="modal modal-middle" aria-labelledby="dispatch-confirm-title"><div class="modal-box premium-modal max-w-sm p-0"><div class="p-4"><h2 id="dispatch-confirm-title" class="text-base font-black">Confirmar salida</h2><p class="mt-1 text-xs text-base-content/60">El movimiento pasará a tránsito y ya no podrás modificar sus productos.</p><div class="modal-action mt-3"><button type="button" class="btn btn-ghost btn-sm" onclick="closeTransferSubflow('dispatch-confirm-modal')">Cancelar</button><form method="post" action="{% url 'transfer_dispatch' transfer.uuid %}">{% csrf_token %}<button class="btn action-button btn-primary btn-sm">Sí, confirmar salida</button></form></div></div></div><form method="dialog" class="modal-backdrop bg-neutral/20 backdrop-blur-[1px]"><button aria-label="Cancelar confirmación">Cerrar</button></form></dialog>{% endif %}
+
+{% if transfer.status == 'PREPARED' %}<dialog id="return-draft-modal" class="modal modal-middle" aria-labelledby="return-draft-title"><div class="modal-box premium-modal max-w-md p-0"><form method="post" action="{% url 'transfer_return_draft' transfer.uuid %}" class="p-5">{% csrf_token %}<h2 id="return-draft-title" class="text-lg font-black">Volver a borrador</h2><p class="mt-1 text-sm text-base-content/60">Indica el motivo para dejar registro en el historial.</p><fieldset class="fieldset mt-3"><legend class="fieldset-legend">Motivo</legend><textarea name="reason" required rows="3" class="textarea w-full" placeholder="Describe el motivo"></textarea></fieldset><div class="modal-action"><button type="button" class="btn btn-ghost btn-sm" onclick="closeTransferSubflow('return-draft-modal')">Cancelar</button><button class="btn action-button btn-warning btn-sm">Confirmar</button></div></form></div><form method="dialog" class="modal-backdrop bg-neutral/20 backdrop-blur-[1px]"><button aria-label="Cancelar retorno">Cerrar</button></form></dialog>{% endif %}
+
+{% if request.user|can:"close" %}{% if transfer.status == 'RECEIVED' or transfer.status == 'RECEIVED_DIFFERENCES' %}<dialog id="close-confirm-modal" class="modal modal-middle" aria-labelledby="close-confirm-title"><div class="modal-box premium-modal max-w-md p-0"><div class="p-5"><h2 id="close-confirm-title" class="text-lg font-black">Cerrar traspaso</h2><p class="mt-2 text-sm text-base-content/60">Confirma que el seguimiento operativo está completo.</p><div class="modal-action"><button type="button" class="btn btn-ghost btn-sm" onclick="closeTransferSubflow('close-confirm-modal')">Cancelar</button><form method="post" action="{% url 'transfer_close' transfer.uuid %}">{% csrf_token %}<button class="btn action-button btn-success btn-sm">Confirmar cierre</button></form></div></div></div><form method="dialog" class="modal-backdrop bg-neutral/20 backdrop-blur-[1px]"><button aria-label="Cancelar cierre">Cerrar</button></form></dialog>{% endif %}{% endif %}
+
+{% if request.user|can:"cancel" %}{% if transfer.status != 'CLOSED' and transfer.status != 'CANCELLED' %}<dialog id="cancel-transfer-modal" class="modal modal-middle" aria-labelledby="cancel-transfer-title"><div class="modal-box premium-modal max-w-md p-0"><form method="post" action="{% url 'transfer_cancel' transfer.uuid %}" class="p-5">{% csrf_token %}<h2 id="cancel-transfer-title" class="text-lg font-black text-error">Anular movimiento</h2><p class="mt-1 text-sm text-base-content/60">Esta acción detiene definitivamente el flujo.</p><fieldset class="fieldset mt-3"><legend class="fieldset-legend">Motivo de anulación</legend><textarea name="reason" required rows="3" class="textarea textarea-error w-full" placeholder="Describe el motivo"></textarea></fieldset><div class="modal-action"><button type="button" class="btn btn-ghost btn-sm" onclick="closeTransferSubflow('cancel-transfer-modal')">Cancelar</button><button class="btn action-button btn-error btn-sm">Anular movimiento</button></div></form></div><form method="dialog" class="modal-backdrop bg-neutral/20 backdrop-blur-[1px]"><button aria-label="Cancelar anulación">Cerrar</button></form></dialog>{% endif %}{% endif %}
+
+<script>
+  function openTransferSubflow(id) {
+    const flow = document.getElementById("transfer-flow-modal");
+    const target = document.getElementById(id);
+    if (!target) return;
+    if (flow && flow.open) flow.close();
+    target.addEventListener("close", () => {
+      if (flow && !flow.open) flow.showModal();
+    }, { once: true });
+    if (!target.open) target.showModal();
+  }
+  function closeTransferSubflow(id) {
+    const target = document.getElementById(id);
+    const flow = document.getElementById("transfer-flow-modal");
+    if (target && target.open) target.close();
+  }
+  {% if open_flow_modal %}
+  document.addEventListener("DOMContentLoaded", () => {
+    const flow = document.getElementById("transfer-flow-modal");
+    const message = document.getElementById("global-message-modal");
+    const openFlow = () => { if (flow && !flow.open) flow.showModal(); };
+    if (message) message.addEventListener("close", openFlow, { once: true });
+    else openFlow();
+  }, { once: true });
+  {% endif %}
+</script>
+{% endblock %}

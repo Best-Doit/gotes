@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Auditoría · GOTES{% endblock %}
+{% block content %}
+<section class="card border border-base-300 bg-base-100 shadow-sm">
+  <div class="card-body gap-3 p-4"><div><h2 class="card-title text-xl">Buscar en el historial</h2><p class="text-sm text-base-content/50">Registro inmutable de acciones dentro de tu alcance.</p></div><form method="get" class="flex flex-col gap-2 sm:flex-row"><input name="q" value="{{ request.GET.q }}" placeholder="Acción, código o descripción" class="input min-w-0 flex-1"><button class="btn btn-info btn-soft px-5">{% include "core/_icon.html" with name="search" %}Buscar</button>{% if request.GET.q %}<a href="{% url 'audit_list' %}" class="btn btn-ghost">Limpiar</a>{% endif %}</form></div>
+</section>
+<section class="mt-4 min-w-0" aria-label="Resultados de auditoría">
+  <div class="overflow-x-auto"><table class="table premium-table table-sm"><thead><tr><th>Fecha y usuario</th><th>Acción</th><th>Descripción</th></tr></thead><tbody>{% for log in logs %}<tr><td class="whitespace-nowrap"><div class="font-bold">{{ log.created_at|date:"d/m/Y H:i" }}</div><div class="text-xs text-base-content/45">{{ log.user|default:"Sistema" }}</div></td><td><span class="badge badge-info badge-outline badge-sm">{{ log.action }}</span><div class="mt-1 max-w-44 truncate text-xs text-base-content/40">{{ log.object_uuid }}</div></td><td class="min-w-72">{{ log.description }}{% if log.reason %}<div class="mt-1 text-xs italic text-base-content/50">Motivo: {{ log.reason }}</div>{% endif %}</td></tr>{% empty %}<tr><td colspan="3"><div class="py-12 text-center"><div class="font-bold">No hay eventos</div><p class="text-sm text-base-content/50">Los cambios auditados aparecerán aquí.</p></div></td></tr>{% endfor %}</tbody></table></div>
+</section>
+{% endblock %}

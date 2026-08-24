@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% load core_tags %}
+{% block title %}Recibir {{ transfer.code }} · GOTES{% endblock %}
+{% block content %}
+<section class="min-w-0" aria-labelledby="receipt-table-title">
+  <header class="flex flex-wrap items-center justify-between gap-2 border-b border-base-300 px-1 pb-3">
+    <div>
+      <h2 id="receipt-table-title" class="text-base font-black">Productos por recibir</h2>
+      <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-base-content/50">
+        <span>{{ transfer.code }} · {{ transfer.origin.name }}</span>
+        {% include "core/_icon.html" with name="arrow-right" css="h-3.5 w-3.5 shrink-0" %}
+        <span>{{ transfer.destination.name }}</span>
+      </div>
+    </div>
+    <button type="button" class="btn btn-info btn-soft btn-sm" onclick="document.getElementById('receipt-flow-modal').showModal()" aria-controls="receipt-flow-modal">
+      {% include "core/_icon.html" with name="eye" %}Continuar recepción
+    </button>
+  </header>
+
+  <div class="overflow-x-auto pb-2">
+    <table class="table premium-table table-sm">
+      <thead><tr><th>Código</th><th>Producto</th><th class="text-right">Enviado</th><th class="text-right">Recibido</th><th>Condición</th></tr></thead>
+      <tbody>
+        {% for form in expected %}
+        <tr>
+          <td class="font-semibold">{{ form.instance.product.code }}</td>
+          <td class="font-bold">{{ form.instance.product.name }}</td>
+          <td class="text-right">{{ form.instance.transfer_item.quantity_sent }}</td>
+          <td class="text-right font-black">{{ form.instance.quantity_received }}</td>
+          <td>{% if form.instance.is_damaged %}<span class="badge badge-error badge-outline badge-sm">Dañado</span>{% elif form.instance.quantity_received == form.instance.transfer_item.quantity_sent %}<span class="badge badge-success badge-outline badge-sm">Conforme</span>{% else %}<span class="badge badge-warning badge-outline badge-sm">Revisar</span>{% endif %}</td>
+        </tr>
+        {% empty %}<tr><td colspan="5" class="py-10 text-center text-base-content/50">No hay productos para recibir.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<dialog id="receipt-flow-modal" class="modal modal-middle" aria-labelledby="receipt-flow-title">
+  <div class="modal-box premium-modal flex max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-3xl flex-col overflow-hidden p-0 sm:max-h-[90dvh] sm:w-full" x-data="{ step: {{ initial_step }} }">
+    <header class="flex items-start justify-between gap-3 border-b border-base-300 px-4 py-3">
+      <div class="min-w-0">
+        <p class="text-[.65rem] font-bold uppercase tracking-[.08em] text-primary/70">Flujo de recepción</p>
+        <div class="mt-0.5 flex flex-wrap items-center gap-2"><h2 id="receipt-flow-title" class="truncate text-lg font-black">{{ transfer.code }}</h2><span class="badge badge-info badge-outline badge-sm">En recepción</span></div>
+        <p class="mt-0.5 text-xs text-base-content/55">Verifica, guarda la evidencia y confirma al finalizar.</p>
+      </div>
+      <form method="dialog"><button class="modal-close btn btn-circle btn-ghost btn-sm" aria-label="Cerrar recepción"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6l12 12M18 6 6 18" /></svg></button></form>
+    </header>
+
+    <div class="border-b border-base-300 px-4 py-2">
+      <ul class="steps steps-horizontal w-full text-[.65rem]" aria-label="Progreso de la recepción">
+        <li class="step" :class="step >= 1 ? 'step-primary' : ''">Cantidades</li>
+        <li class="step" :class="step >= 2 ? 'step-primary' : ''">Inesperados</li>
+        <li class="step" :class="step >= 3 ? 'step-primary' : ''">Evidencia</li>
+        <li class="step" :class="step >= 4 ? 'step-primary' : ''">Confirmar</li>
+      </ul>
+    </div>
+
+    <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
+      <form id="receipt-draft-form" method="post">
+        {% csrf_token %}
+        {{ expected.management_form }}
+        {{ unexpected.management_form }}
+        <input type="hidden" name="_next_step" value="3">
+
+        <section x-show="step === 1" aria-labelledby="receipt-quantities-title">
+          <div><h3 id="receipt-quantities-title" class="text-base font-black">Cantidades recibidas</h3><p class="mt-0.5 text-xs text-base-content/50">Compara cada línea con el envío físico y marca cualquier daño.</p></div>
+          <div class="mt-2 divide-y divide-base-300">
+            {% for form in expected %}
+            <div class="py-2.5">
+              {{ form.id }}
+              <div class="grid gap-2 sm:grid-cols-[minmax(10rem,1.6fr)_minmax(6rem,.65fr)_auto_minmax(10rem,1.2fr)] sm:items-end">
+                <div class="self-center"><div class="font-bold">{{ form.instance.product.name }}</div><div class="text-xs text-base-content/50">{{ form.instance.product.code }} · enviado {{ form.instance.transfer_item.quantity_sent }}</div></div>
+                <fieldset class="fieldset py-0"><legend class="fieldset-legend">Recibido</legend>{{ form.quantity_received }}</fieldset>
+                <label class="label mb-1 cursor-pointer gap-2">{{ form.is_damaged }} Dañado</label>
+                <fieldset class="fieldset py-0"><legend class="fieldset-legend">Observación</legend>{{ form.observation }}</fieldset>
+              </div>
+              {% if form.errors %}<div role="alert" class="alert alert-error alert-soft mt-2 py-2 text-sm">{{ form.errors }}</div>{% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section x-cloak x-show="step === 2" aria-labelledby="receipt-unexpected-title">
+          <div><h3 id="receipt-unexpected-title" class="text-base font-black">Productos inesperados</h3><p class="mt-0.5 text-xs text-base-content/50">Completa solo si llegó un producto que no estaba incluido en el envío.</p></div>
+          <div class="mt-2 divide-y divide-base-300">
+            {% for form in unexpected %}
+            <div class="py-2.5">
+              {{ form.id }}
+              <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 lg:items-end">
+                <fieldset class="fieldset py-0"><legend class="fieldset-legend">Producto</legend>{{ form.product }}</fieldset>
+                <fieldset class="fieldset py-0"><legend class="fieldset-legend">Cantidad</legend>{{ form.quantity_received }}</fieldset>
+                <label class="label mb-1 cursor-pointer gap-2">{{ form.is_damaged }} Dañado</label>
+                <fieldset class="fieldset py-0"><legend class="fieldset-legend">Observación</legend>{{ form.observation }}</fieldset>
+                {% if form.instance.pk %}<label class="label cursor-pointer gap-2">{{ form.DELETE }} Quitar</label>{% endif %}
+              </div>
+              {% if form.errors %}<div role="alert" class="alert alert-error alert-soft mt-2 py-2 text-sm">{{ form.errors }}</div>{% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </section>
+      </form>
+
+      <section x-cloak x-show="step === 3" aria-labelledby="receipt-evidence-title">
+        <div><h3 id="receipt-evidence-title" class="text-base font-black">Evidencia de recepción</h3><p class="mt-0.5 text-xs text-base-content/50">Adjunta una fotografía o PDF antes de confirmar.</p></div>
+        {% if draft_just_saved %}<div role="status" class="alert alert-success alert-soft mt-2 py-2 text-sm">{% include "core/_icon.html" with name="check" %}<span>Avance de recepción guardado.</span></div>{% endif %}
+        {% if evidence_just_saved %}<div role="status" class="alert alert-success alert-soft mt-2 py-2 text-sm">{% include "core/_icon.html" with name="check" %}<span>Evidencia guardada correctamente.</span></div>{% endif %}
+        {% if evidence_error %}<div role="alert" class="alert alert-error alert-soft mt-2 py-2 text-sm">{% include "core/_icon.html" with name="alert" %}<span>No se pudo guardar la evidencia. Revisa el archivo e inténtalo otra vez.</span></div>{% endif %}
+
+        {% if receipt_evidences %}
+        <div class="mt-2 divide-y divide-base-300 border-y border-base-300">
+          {% for evidence in receipt_evidences %}<a href="{% url 'evidence_download' evidence.uuid %}" target="_blank" class="flex items-center justify-between gap-2 py-2 text-sm"><span class="min-w-0"><span class="block font-bold">{{ evidence.original_name }}</span><span class="block truncate text-xs text-base-content/45">{{ evidence.description|default:"Evidencia de recepción" }}</span></span>{% include "core/_icon.html" with name="external" %}</a>{% endfor %}
+        </div>
+        {% endif %}
+
+        <form id="receipt-evidence-form" method="post" enctype="multipart/form-data" action="{% url 'upload_evidence' transfer.uuid %}" class="mt-3 grid gap-2 sm:grid-cols-2">
+          {% csrf_token %}<input type="hidden" name="_return_to" value="receipt">
+          {% for field in evidence_form %}<fieldset class="fieldset min-w-0 {% if forloop.last %}sm:col-span-2{% endif %}"><legend class="fieldset-legend">{{ field.label }}</legend>{{ field }}{% if field.help_text %}<p class="label block text-xs">{{ field.help_text }}</p>{% endif %}{% if field.errors %}<p class="label text-error">{{ field.errors|striptags }}</p>{% endif %}</fieldset>{% endfor %}
+          {% if has_receipt_evidence %}<div class="sm:col-span-2"><button class="btn btn-info btn-soft btn-sm">{% include "core/_icon.html" with name="upload" %}Adjuntar otra evidencia</button></div>{% endif %}
+        </form>
+      </section>
+
+      <section x-cloak x-show="step === 4" aria-labelledby="receipt-confirm-title">
+        <div><h3 id="receipt-confirm-title" class="text-base font-black">Confirmar recepción</h3><p class="mt-0.5 text-xs text-base-content/50">Esta acción bloquea las cantidades y genera una incidencia si existen diferencias.</p></div>
+        {% if confirm_error %}<div role="alert" class="alert alert-error alert-soft mt-2 py-2 text-sm">{% include "core/_icon.html" with name="alert" %}<span>No se pudo confirmar. Verifica las cantidades y que exista una evidencia de recepción.</span></div>{% endif %}
+        <dl class="mt-3 grid grid-cols-2 gap-3 border-y border-base-300 py-3 text-sm sm:grid-cols-3">
+          <div><dt class="text-xs text-base-content/45">Productos enviados</dt><dd class="font-black">{{ expected|length }}</dd></div>
+          <div><dt class="text-xs text-base-content/45">Evidencias</dt><dd class="font-black">{{ receipt_evidences.count }}</dd></div>
+          <div class="col-span-2 sm:col-span-1"><dt class="text-xs text-base-content/45">Resultado</dt><dd class="font-semibold">Se calculará al confirmar</dd></div>
+        </dl>
+        <div role="alert" class="alert alert-warning alert-soft mt-3 py-2 text-sm">{% include "core/_icon.html" with name="alert" %}<span>Confirma únicamente después de completar la verificación física.</span></div>
+        {% if request.user|can:"receive" %}<form id="receipt-confirm-form" method="post" action="{% url 'receipt_confirm' transfer.uuid %}">{% csrf_token %}</form>{% endif %}
+      </section>
+    </div>
+
+    <footer class="flex flex-wrap items-center justify-between gap-2 border-t border-base-300 px-4 py-2.5">
+      <div>
+        <form method="dialog" x-show="step === 1"><button class="btn btn-ghost btn-sm">Cerrar</button></form>
+        <button type="button" class="btn btn-ghost btn-sm" x-cloak x-show="step > 1" @click="step--">{% include "core/_icon.html" with name="arrow-right" css="h-4 w-4 rotate-180" %}Atrás</button>
+      </div>
+      <div class="flex gap-2">
+        <button type="button" class="btn btn-primary btn-soft btn-sm" x-show="step === 1" @click="step = 2">Siguiente{% include "core/_icon.html" with name="arrow-right" %}</button>
+        <button type="submit" form="receipt-draft-form" class="btn btn-warning btn-soft btn-sm" x-cloak x-show="step === 2">{% include "core/_icon.html" with name="save" %}Guardar y continuar</button>
+        {% if has_receipt_evidence %}<button type="button" class="btn btn-primary btn-soft btn-sm" x-cloak x-show="step === 3" @click="step = 4">Continuar{% include "core/_icon.html" with name="arrow-right" %}</button>{% else %}<button type="submit" form="receipt-evidence-form" class="btn btn-info btn-soft btn-sm" x-cloak x-show="step === 3">{% include "core/_icon.html" with name="upload" %}Adjuntar y continuar</button>{% endif %}
+        {% if request.user|can:"receive" %}<button type="submit" form="receipt-confirm-form" class="btn btn-success btn-soft btn-sm" x-cloak x-show="step === 4">{% include "core/_icon.html" with name="check" %}Confirmar recepción</button>{% endif %}
+      </div>
+    </footer>
+  </div>
+  <form method="dialog" class="modal-backdrop bg-neutral/20 backdrop-blur-[1px]"><button aria-label="Cerrar recepción">Cerrar</button></form>
+</dialog>
+
+{% if open_receipt_flow %}<script>document.addEventListener("DOMContentLoaded", () => { const modal = document.getElementById("receipt-flow-modal"); if (modal && !modal.open) modal.showModal(); }, { once: true });</script>{% endif %}
+{% endblock %}

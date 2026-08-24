@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · GOTES{% endblock %}
+{% block content %}
+<form method="post" class="space-y-2 pb-20 lg:pb-0">
+  {% csrf_token %}
+  <section class="card card-xs border border-base-300 bg-base-100 shadow-sm">
+    <div class="card-body grid gap-2 p-2.5 md:grid-cols-[minmax(9rem,.55fr)_minmax(12rem,1fr)_minmax(16rem,1.45fr)] md:items-end">
+      <div class="self-center">
+        <h2 class="card-title text-sm">Ruta del traspaso</h2>
+        <p class="text-[.68rem] leading-tight text-base-content/45">Destino y nota general</p>
+      </div>
+      <fieldset class="fieldset gap-0"><legend class="fieldset-legend pb-1">{{ form.destination.label }}</legend>{{ form.destination }}{% if form.destination.errors %}<div class="label text-error">{{ form.destination.errors|striptags }}</div>{% endif %}</fieldset>
+      <fieldset class="fieldset gap-0"><legend class="fieldset-legend pb-1">{{ form.notes.label }}</legend>{{ form.notes }}{% if form.notes.errors %}<div class="label text-error">{{ form.notes.errors|striptags }}</div>{% endif %}</fieldset>
+    </div>
+  </section>
+
+  <section class="mt-4" aria-labelledby="transfer-products-title" x-data="{ addRow() { const total = document.querySelector('#id_items-TOTAL_FORMS'); const index = Number(total.value); const html = document.querySelector('#empty-item-row').innerHTML.replaceAll('__prefix__', index); document.querySelector('#item-rows').insertAdjacentHTML('beforeend', html); total.value = index + 1; } }">
+    <div class="flex flex-col gap-2">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div><h2 id="transfer-products-title" class="text-lg font-black">Productos</h2><p class="text-xs text-base-content/50">Una línea por producto; agrega solo las necesarias.</p></div>
+        <button type="button" @click="addRow()" class="btn btn-info btn-soft btn-sm">{% include "core/_icon.html" with name="plus" %}Agregar fila</button>
+      </div>
+      {{ formset.management_form }}
+      <div class="overflow-x-auto">
+        <table class="table premium-table transfer-items-table table-sm min-w-[46rem]">
+          <thead>
+            <tr>
+              <th class="w-28">Código</th>
+              <th class="w-[34%]">Nombre</th>
+              <th class="w-28">Cantidad</th>
+              <th>Observación</th>
+              <th class="w-20 text-center">Quitar</th>
+            </tr>
+          </thead>
+          <tbody id="item-rows">
+          {% for item_form in formset %}
+            {% include "core/_transfer_item_row.html" with item_form=item_form %}
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <template id="empty-item-row">{% include "core/_transfer_item_row.html" with item_form=formset.empty_form %}</template>
+    </div>
+  </section>
+
+  <div class="fixed inset-x-0 bottom-0 z-20 flex gap-2 bg-base-100/95 p-2 shadow-[0_-2px_8px_rgb(11_23_57_/_0.14)] backdrop-blur lg:static lg:justify-end lg:bg-transparent lg:p-0 lg:shadow-none">
+    <a href="{% url 'transfer_list' %}" class="btn btn-soft flex-1 lg:flex-none">Cancelar</a>
+    <button class="btn btn-success btn-soft flex-1 px-6 lg:min-w-44 lg:flex-none">{% include "core/_icon.html" with name="save" %}Guardar borrador</button>
+  </div>
+</form>
+<script>
+  window.productPicker = () => ({
+    query: "",
+    selectedCode: "",
+    open: false,
+    activeIndex: -1,
+    products: [],
+    nativeSelect: null,
+    menuStyle: "",
+    init() {
+      this.nativeSelect = this.$refs.nativeSelect.querySelector("select");
+      this.products = [...this.nativeSelect.options]
+        .filter((option) => option.value)
+        .map((option) => {
+          const label = option.text.trim();
+          const separator = label.indexOf(" — ");
+          return {
+            value: option.value,
+            code: separator >= 0 ? label.slice(0, separator) : "",
+            name: separator >= 0 ? label.slice(separator + 3) : label,
+            searchable: this.normalize(label),
+          };
+        });
+      const selected = this.products.find((product) => product.value === this.nativeSelect.value);
+      if (selected) {
+        this.query = selected.name;
+        this.selectedCode = selected.code;
+      }
+    },
+    normalize(value) {
+      return value.toLocaleLowerCase("es").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    },
+    get matches() {
+      const term = this.normalize(this.query);
+      return this.products.filter((product) => !term || product.searchable.includes(term)).slice(0, 8);
+    },
+    show() {
+      this.open = true;
+      this.activeIndex = -1;
+      this.positionMenu();
+    },
+    search() {
+      this.nativeSelect.value = "";
+      this.selectedCode = "";
+      this.open = true;
+      this.activeIndex = -1;
+      this.positionMenu();
+    },
+    choose(product) {
+      this.query = product.name;
+      this.selectedCode = product.code;
+      this.nativeSelect.value = product.value;
+      this.nativeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      this.close();
+    },
+    chooseActive() {
+      if (!this.matches.length) return;
+      this.choose(this.matches[Math.max(this.activeIndex, 0)]);
+    },
+    move(direction) {
+      if (!this.open) this.show();
+      if (!this.matches.length) return;
+      this.activeIndex = (this.activeIndex + direction + this.matches.length) % this.matches.length;
+    },
+    close() {
+      this.open = false;
+      this.activeIndex = -1;
+    },
+    positionMenu() {
+      if (!this.open || !this.$refs.search) return;
+      this.$nextTick(() => {
+        const rect = this.$refs.search.getBoundingClientRect();
+        const menuHeight = Math.min(224, Math.max(48, this.matches.length * 36 + 8));
+        const width = Math.min(rect.width, window.innerWidth - 16);
+        const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
+        const below = window.innerHeight - rect.bottom;
+        const top = below >= menuHeight + 8 ? rect.bottom + 4 : Math.max(8, rect.top - menuHeight - 4);
+        this.menuStyle = `left:${left}px;top:${top}px;width:${width}px`;
+      });
+    },
+  });
+</script>
+{% endblock %}

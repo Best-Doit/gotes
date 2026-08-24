@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Asignaciones · GOTES{% endblock %}
+{% block content %}
+<section class="min-w-0" aria-labelledby="assignments-title">
+    <header class="flex flex-wrap items-start justify-between gap-3 px-1 pb-2">
+      <div>
+        <h2 id="assignments-title" class="text-xl font-black">Asignaciones de usuarios</h2>
+        <p class="mt-1 text-sm text-base-content/55">Vincula cada cuenta con su rol y, cuando corresponda, con una sucursal.</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="badge badge-neutral badge-outline badge-sm">{{ items.count }} usuarios</span>
+        {% if read_only %}
+        <span class="badge badge-info badge-outline badge-sm">Solo lectura</span>
+        {% else %}
+        <a href="{% url 'manage_assignments' %}?nuevo=1" class="btn btn-primary btn-soft btn-sm px-4">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+          Nueva asignación
+        </a>
+        {% endif %}
+      </div>
+    </header>
+
+    <div class="overflow-x-auto pb-2">
+      <table class="table premium-table table-sm">
+        <thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Sucursal</th><th>Asignación</th><th class="text-right">Acción</th></tr></thead>
+        <tbody>
+          {% for item in items %}
+          <tr class="hover:bg-base-200/60">
+            <td><div class="font-black">{{ item.username }}</div><div class="text-xs text-base-content/45">{{ item.email|default:"Sin correo" }}</div></td>
+            <td class="font-semibold">{{ item.get_full_name|default:"—" }}</td>
+            <td>{% if item.role %}<span class="badge badge-info badge-outline badge-sm">{{ item.get_role_display }}</span>{% else %}<span class="text-base-content/40">—</span>{% endif %}</td>
+            <td>{% if item.branch %}{{ item.branch.name }}{% elif item.role == 'MANAGER' or not item.role %}<span class="text-base-content/40">Sin asignar</span>{% else %}<span class="text-base-content/40">No aplica</span>{% endif %}</td>
+            <td>{% if item.role %}<span class="badge badge-success badge-outline badge-sm">Asignado</span>{% else %}<span class="badge badge-warning badge-outline badge-sm">Pendiente</span>{% endif %}</td>
+            <td class="text-right">{% if read_only %}<span class="text-base-content/35">—</span>{% else %}<a href="{% url 'manage_assignment_edit' item.pk %}" class="btn btn-circle btn-info btn-soft btn-sm" aria-label="{% if item.role %}Editar asignación{% else %}Asignar{% endif %} {{ item.username }}">{% include "core/_icon.html" with name="edit" %}</a>{% endif %}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6"><div class="py-14 text-center"><div class="font-bold">No hay usuarios para asignar</div><p class="mt-1 text-sm text-base-content/50">Primero registra una cuenta desde la sección Usuarios.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+</section>
+
+{% if not read_only %}
+<dialog id="assignment-form-modal" class="modal modal-bottom sm:modal-middle">
+	  <div class="modal-box premium-modal flex max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] flex-col overflow-hidden rounded-[1.25rem] p-0 sm:max-h-[90dvh] sm:w-full sm:max-w-md" x-data="{ role: '{{ form.role.value|default_if_none:''|escapejs }}' }" @change="if ($event.target.name === 'role') role = $event.target.value">
+    <form method="post" class="flex min-h-0 flex-1 flex-col">{% csrf_token %}
+      <header class="flex shrink-0 items-start justify-between gap-3 px-5 pb-1 pt-4 sm:px-6 sm:pt-5">
+        <div><h2 class="text-lg font-semibold tracking-tight">{% if assignment_user %}Editar asignación{% else %}Nueva asignación{% endif %}</h2><p class="mt-0.5 text-xs text-base-content/55">Selecciona el usuario, su rol y la sucursal cuando aplique.</p></div>
+        <button type="button" class="modal-close btn btn-circle btn-ghost btn-sm shrink-0" onclick="this.closest('dialog').close()" aria-label="Cerrar"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 6l12 12M18 6 6 18" /></svg></button>
+      </header>
+      <div class="min-h-0 flex-1 overflow-y-auto px-5 py-2 sm:px-6 sm:py-3">
+        <div class="grid gap-y-2">
+          {% if form.non_field_errors %}<div role="alert" class="alert alert-error alert-soft py-2 text-sm">{{ form.non_field_errors }}</div>{% endif %}
+          <fieldset class="fieldset min-w-0"><legend class="fieldset-legend">{{ form.user.label }}</legend>{{ form.user }}{% if form.user.errors %}<p class="label block text-error">{{ form.user.errors|striptags }}</p>{% endif %}</fieldset>
+          <fieldset class="fieldset min-w-0"><legend class="fieldset-legend">{{ form.role.label }}</legend>{{ form.role }}{% if form.role.errors %}<p class="label block text-error">{{ form.role.errors|striptags }}</p>{% endif %}</fieldset>
+          <fieldset class="fieldset min-w-0" x-cloak x-show="role === 'MANAGER'"><legend class="fieldset-legend">{{ form.branch.label }}</legend>{{ form.branch }}{% if form.branch.help_text %}<p class="label block text-xs">{{ form.branch.help_text }}</p>{% endif %}{% if form.branch.errors %}<p class="label block text-error">{{ form.branch.errors|striptags }}</p>{% endif %}</fieldset>
+        </div>
+      </div>
+      <footer class="modal-action m-0 grid shrink-0 grid-cols-2 gap-2 px-5 pb-4 pt-2 sm:flex sm:justify-end sm:px-6 sm:pb-5">
+        <a href="{% url 'manage_assignments' %}" class="btn btn-outline btn-sm">Cancelar</a>
+        <button type="submit" class="btn btn-success btn-soft btn-sm sm:min-w-28">{% include "core/_icon.html" with name="save" %}Guardar</button>
+      </footer>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop bg-neutral/20 backdrop-blur-[1px]"><button>Cerrar</button></form>
+</dialog>
+{% if request.GET.nuevo or assignment_user or form.errors %}<script>document.getElementById('assignment-form-modal').showModal()</script>{% endif %}
+{% endif %}
+{% endblock %}

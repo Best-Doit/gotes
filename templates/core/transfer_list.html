@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% load core_tags %}
+{% block title %}Traspasos · GOTES{% endblock %}
+{% block content %}
+<section class="rounded-box border border-base-300 bg-base-100 px-4 py-3 shadow-sm">
+  <form method="get" class="grid gap-3">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <div class="flex flex-wrap items-center gap-2"><h2 class="text-lg font-bold">Buscar traspasos</h2>{% if active_filter_count %}<span class="badge badge-info badge-outline badge-sm">{{ active_filter_count }} filtro{{ active_filter_count|pluralize }} activo{{ active_filter_count|pluralize }}</span>{% endif %}</div>
+        <p class="text-xs text-base-content/50">Encuentra un movimiento por código, producto, estado o ruta.</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <a href="{% url 'transfer_export_csv' %}?{{ request.GET.urlencode }}" class="btn btn-info btn-soft btn-xs px-3">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3v12m0 0 4-4m-4 4-4-4M5 19h14" /></svg>
+          Descargar CSV
+        </a>
+        {% if active_filter_count %}<a href="{% url 'transfer_list' %}" class="btn btn-soft btn-xs px-3">Limpiar</a>{% endif %}
+      </div>
+    </div>
+
+    <div class="grid gap-2 md:grid-cols-[minmax(15rem,2fr)_minmax(10rem,1fr)_minmax(11rem,1fr)_auto] md:items-end">
+      <fieldset class="fieldset min-w-0 py-0"><legend class="fieldset-legend py-0 text-[.68rem]">Código o producto</legend><input type="search" name="q" value="{{ request.GET.q }}" class="input input-sm w-full" placeholder="Ej. TR-2026 o nombre del producto"></fieldset>
+      <fieldset class="fieldset min-w-0 py-0"><legend class="fieldset-legend py-0 text-[.68rem]">Estado</legend><select name="status" class="select select-sm w-full"><option value="">Todos los estados</option>{% for value,label in statuses %}<option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></fieldset>
+      <fieldset class="fieldset min-w-0 py-0"><legend class="fieldset-legend py-0 text-[.68rem]">Conciliación</legend><select name="commercial" class="select select-sm w-full"><option value="">Cualquier estado</option><option value="pending" {% if request.GET.commercial == 'pending' %}selected{% endif %}>Pendiente</option><option value="registered" {% if request.GET.commercial == 'registered' %}selected{% endif %}>Registrada</option></select></fieldset>
+      <button class="btn btn-info btn-soft btn-sm min-w-28 px-4">{% include "core/_icon.html" with name="filter" %}Aplicar filtros</button>
+    </div>
+
+    {% if request.GET.queue %}<input type="hidden" name="queue" value="{{ request.GET.queue }}">{% endif %}
+    <details class="group border-t border-base-300 pt-2" {% if request.GET.origin or request.GET.destination or request.GET.user or request.GET.date_from or request.GET.date_to %}open{% endif %}>
+      <summary class="flex cursor-pointer list-none items-center gap-2 text-xs font-bold text-base-content/60">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m9 18 6-6-6-6" /></svg>
+        Más filtros
+      </summary>
+      <div class="mt-2 grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
+        <fieldset class="fieldset min-w-0 py-0"><legend class="fieldset-legend py-0 text-[.68rem]">Origen</legend><select name="origin" class="select select-sm w-full"><option value="">Cualquier origen</option>{% for branch in branches %}<option value="{{ branch.pk }}" {% if request.GET.origin == branch.pk|stringformat:'s' %}selected{% endif %}>{{ branch.name }}</option>{% endfor %}</select></fieldset>
+        <fieldset class="fieldset min-w-0 py-0"><legend class="fieldset-legend py-0 text-[.68rem]">Destino</legend><select name="destination" class="select select-sm w-full"><option value="">Cualquier destino</option>{% for branch in branches %}<option value="{{ branch.pk }}" {% if request.GET.destination == branch.pk|stringformat:'s' %}selected{% endif %}>{{ branch.name }}</option>{% endfor %}</select></fieldset>
+        <fieldset class="fieldset min-w-0 py-0"><legend class="fieldset-legend py-0 text-[.68rem]">Responsable</legend><select name="user" class="select select-sm w-full"><option value="">Cualquier usuario</option>{% for user in users %}<option value="{{ user.pk }}" {% if request.GET.user == user.pk|stringformat:'s' %}selected{% endif %}>{{ user.get_full_name|default:user.username }}</option>{% endfor %}</select></fieldset>
+        <fieldset class="fieldset min-w-0 py-0"><legend class="fieldset-legend py-0 text-[.68rem]">Desde</legend><input type="date" name="date_from" value="{{ request.GET.date_from }}" class="input input-sm w-full"></fieldset>
+        <fieldset class="fieldset min-w-0 py-0"><legend class="fieldset-legend py-0 text-[.68rem]">Hasta</legend><input type="date" name="date_to" value="{{ request.GET.date_to }}" class="input input-sm w-full"></fieldset>
+      </div>
+    </details>
+  </form>
+</section>
+
+<section class="mt-4 min-w-0" aria-labelledby="movements-title">
+    <header class="flex flex-wrap items-center justify-between gap-3 px-1 pb-2">
+      <div><h2 id="movements-title" class="text-xl font-black">Movimientos</h2><p class="text-sm text-base-content/50">{{ page_obj.paginator.count }} resultado{{ page_obj.paginator.count|pluralize }}</p></div>
+      <div class="flex flex-wrap items-center justify-end gap-2">
+        {% if page_obj.paginator.num_pages > 1 %}<span class="badge badge-neutral badge-outline badge-sm">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>{% endif %}
+        {% if request.user.is_operational %}<a href="{% url 'transfer_create' %}" class="btn btn-primary btn-soft btn-sm px-4"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>Nuevo traspaso</a>{% endif %}
+      </div>
+    </header>
+
+    <div class="hidden overflow-x-auto pb-2 md:block">
+      <table class="table premium-table table-sm">
+        <thead><tr><th>Movimiento</th><th>Ruta</th><th>Estado</th><th>Conciliación comercial</th><th>Responsable</th><th class="text-right">Acción</th></tr></thead>
+        <tbody>
+          {% for transfer in transfers %}
+          <tr class="hover:bg-base-200/60">
+            <td class="min-w-44"><div class="font-black tracking-tight">{{ transfer.code }}</div><div class="mt-0.5 text-xs text-base-content/45">{{ transfer.created_at|date:"d/m/Y" }} · {{ transfer.created_at|date:"H:i" }}</div></td>
+            <td class="min-w-64"><div class="flex items-center gap-2"><span class="max-w-28 truncate font-semibold" title="{{ transfer.origin.name }}">{{ transfer.origin.name }}</span><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 text-base-content/35" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 12h14m-4-4 4 4-4 4" /></svg><span class="max-w-28 truncate font-semibold" title="{{ transfer.destination.name }}">{{ transfer.destination.name }}</span></div></td>
+            <td><span class="badge {{ transfer.status|status_daisy }} badge-sm whitespace-nowrap">{{ transfer.get_status_display }}</span></td>
+            <td class="min-w-48">{% if transfer.commercial_registration %}<div><span class="badge badge-success badge-outline badge-sm">Registrada</span><div class="mt-1 truncate text-xs text-base-content/50">{{ transfer.commercial_registration.external_reference }}</div></div>{% elif transfer.status == 'RECEIVED' or transfer.status == 'RECEIVED_DIFFERENCES' or transfer.status == 'CLOSED' %}<span class="badge badge-warning badge-outline badge-sm">Pendiente</span>{% else %}<span class="text-base-content/35">Aún no aplica</span>{% endif %}</td>
+            <td class="min-w-40"><div class="truncate text-sm font-semibold">{{ transfer.created_by.get_full_name|default:transfer.created_by.username }}</div><div class="truncate text-xs text-base-content/45">{{ transfer.created_by.username }}</div></td>
+            <td class="text-right"><a href="{% url 'transfer_detail' transfer.uuid %}?flow=1" class="btn btn-info btn-soft btn-sm whitespace-nowrap" aria-label="Ver detalle de {{ transfer.code }}">Ver detalle{% include "core/_icon.html" with name="arrow-right" %}</a></td>
+          </tr>
+          {% empty %}<tr><td colspan="6"><div class="py-12 text-center"><div class="font-bold">No se encontraron traspasos</div><p class="mt-1 text-sm text-base-content/50">Prueba con otros filtros o limpia la búsqueda.</p></div></td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <ul class="list px-2 pb-2 md:hidden">
+      {% for transfer in transfers %}
+      <li class="list-row items-center px-2 py-3">
+        <div class="min-w-0"><div class="truncate font-black">{{ transfer.code }}</div><div class="text-xs text-base-content/45">{{ transfer.created_at|date:"d/m/Y H:i" }}</div></div>
+        <div class="min-w-0"><div class="flex items-center gap-1 text-sm font-semibold"><span class="truncate">{{ transfer.origin.name }}</span>{% include "core/_icon.html" with name="arrow-right" css="h-3 w-3 shrink-0" %}<span class="truncate">{{ transfer.destination.name }}</span></div><div class="mt-1.5 flex flex-wrap gap-1"><span class="badge {{ transfer.status|status_daisy }} badge-sm">{{ transfer.get_status_display }}</span>{% if transfer.commercial_registration %}<span class="badge badge-success badge-outline badge-sm">Comercial registrada</span>{% elif transfer.status == 'RECEIVED' or transfer.status == 'RECEIVED_DIFFERENCES' or transfer.status == 'CLOSED' %}<span class="badge badge-warning badge-outline badge-sm">Comercial pendiente</span>{% endif %}</div></div>
+        <a href="{% url 'transfer_detail' transfer.uuid %}?flow=1" class="btn btn-circle btn-info btn-soft btn-sm" aria-label="Ver detalle de {{ transfer.code }}">{% include "core/_icon.html" with name="arrow-right" %}</a>
+      </li>
+      {% empty %}<li class="py-12 text-center"><div class="font-bold">No se encontraron traspasos</div><p class="mt-1 text-sm text-base-content/50">Prueba con otros filtros o limpia la búsqueda.</p></li>{% endfor %}
+    </ul>
+</section>
+
+{% if page_obj.paginator.num_pages > 1 %}
+<nav class="mt-2 flex items-center justify-center" aria-label="Paginación">
+  <div class="join shadow-[0_2px_6px_rgb(11_23_57_/_0.17)]">
+    {% if page_obj.has_previous %}<a class="btn btn-soft join-item" href="{% querystring page=page_obj.previous_page_number %}">Anterior</a>{% endif %}
+    <span class="btn btn-soft join-item btn-disabled" aria-current="page">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}<a class="btn btn-soft join-item" href="{% querystring page=page_obj.next_page_number %}">Siguiente</a>{% endif %}
+  </div>
+</nav>
+{% endif %}
+{% endblock %}

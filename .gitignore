@@ -1,0 +1,63 @@
+# Variables y secretos locales
+.env
+.env.*
+!.env.example
+!.env.prod.example
+.envrc
+secrets/
+credentials/
+credentials*.json
+service-account*.json
+client_secret*.json
+local_settings.py
+
+# Claves, certificados privados y almacenes de credenciales
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# Datos persistentes, archivos cargados y bases locales
+.data/
+media/
+uploads/
+staticfiles/
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+
+# Respaldos y exportaciones con posible información operativa
+backups/
+dumps/
+*.sql
+*.sql.gz
+*.dump
+*.backup
+*.bak
+
+# Registros y temporales
+*.log
+*.tmp
+*.swp
+*~
+
+# Python y pruebas
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Herramientas locales del editor/agente
+.codex/
+.idea/
+.vscode/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% load core_tags %}
+{% block title %}Panel · GOTES{% endblock %}
+{% block content %}
+{% if request.user.is_auditor %}<div role="alert" class="alert alert-info alert-soft mb-2"><div><div class="font-bold">Modo auditor</div><p class="text-sm">Tienes acceso completo de consulta dentro de tu empresa. Ninguna acción operativa o administrativa está habilitada.</p></div></div>{% endif %}
+{% if onboarding and not onboarding.ready %}
+<div role="alert" class="alert alert-warning alert-soft alert-vertical mb-2 items-start border border-warning/25 shadow-sm sm:alert-horizontal sm:items-center">
+  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+  <div class="min-w-0 flex-1"><div class="font-bold">Configuración inicial pendiente</div><div class="truncate text-xs opacity-60">{{ onboarding.branches }} sucursales · {{ onboarding.products }} productos · {{ onboarding.managers }} encargados</div></div>
+  <a href="{% url 'manage_users' %}" class="btn btn-warning btn-static-warning btn-sm self-end px-4 font-bold shadow-sm sm:self-auto">Completar</a>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 gap-2 xl:grid-cols-12">
+  <section class="card border border-base-300 bg-base-100 shadow-sm xl:col-span-7" aria-labelledby="operations-title">
+    <div class="card-body gap-3 p-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-info/15 text-info">{% include "core/_icon.html" with name="chart" css="h-5 w-5" %}</div>
+          <div>
+            <h2 id="operations-title" class="card-title text-xl">Estado de operaciones</h2>
+            <p class="mt-0.5 text-sm text-base-content/50">Carga actual del flujo de traspasos</p>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <span class="badge badge-neutral badge-outline">Hoy</span>
+          <span class="text-xs text-base-content/45">{% now "d M Y" %}</span>
+          {% if request.user.is_operational %}
+          <a href="{% url 'transfer_create' %}" class="btn btn-primary btn-soft btn-sm px-4">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+            Nuevo traspaso
+          </a>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="stats grid w-full grid-flow-row grid-cols-2 overflow-hidden border-y border-base-300 bg-transparent shadow-none sm:grid-flow-col sm:grid-cols-4">
+        {% for label, count, query in cards %}
+        <a href="{% url 'transfer_list' %}?{{ query }}" class="stat min-w-0 px-3 py-2.5 transition-colors {% if forloop.counter == 1 %}bg-neutral/5 hover:bg-neutral/10{% elif forloop.counter == 2 %}bg-info/5 hover:bg-info/10{% elif forloop.counter == 3 %}bg-warning/5 hover:bg-warning/10{% else %}bg-error/5 hover:bg-error/10{% endif %}">
+          <div class="stat-title flex items-center gap-1.5 truncate text-xs"><span class="h-2 w-2 shrink-0 rounded-full {% if forloop.counter == 1 %}bg-neutral{% elif forloop.counter == 2 %}bg-info{% elif forloop.counter == 3 %}bg-warning{% else %}bg-error{% endif %}"></span>{{ label }}</div>
+          <div class="stat-value text-2xl {% if forloop.counter == 2 %}text-info{% elif forloop.counter == 3 %}text-warning-content{% elif forloop.last and count %}text-error{% endif %}">{{ count }}</div>
+          <div class="stat-desc flex items-center gap-1">Abrir cola {% include "core/_icon.html" with name="arrow-right" css="h-3.5 w-3.5" %}</div>
+        </a>
+        {% endfor %}
+      </div>
+
+      <div class="border-t border-base-300 pt-3">
+        <div class="mb-2 flex items-center justify-between"><h3 class="font-bold">Distribución por etapa</h3><a href="{% url 'reports' %}" class="btn btn-info btn-soft btn-sm">Ver reporte</a></div>
+        <div class="space-y-2">
+          {% for label, count in workflow %}
+          <div class="grid grid-cols-[6.5rem_1fr_2rem] items-center gap-2 sm:grid-cols-[7rem_1fr_2rem]">
+            <span class="flex items-center gap-1.5 truncate text-xs font-semibold text-base-content/65"><span class="h-2 w-2 shrink-0 rounded-full {% if forloop.counter == 1 %}bg-neutral{% elif forloop.counter == 2 %}bg-info{% elif forloop.counter == 3 %}bg-warning{% elif forloop.counter == 4 %}bg-success{% else %}bg-accent{% endif %}"></span>{{ label }}</span>
+            <progress class="progress {% if forloop.counter == 1 %}progress-neutral{% elif forloop.counter == 2 %}progress-info{% elif forloop.counter == 3 %}progress-warning{% elif forloop.counter == 4 %}progress-success{% else %}progress-accent{% endif %}" value="{{ count }}" max="{{ workflow_max }}" aria-label="{{ label }}: {{ count }}"></progress>
+            <span class="text-right text-sm font-black tabular-nums">{{ count }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card border border-base-300 bg-base-100 shadow-sm xl:col-span-5" aria-labelledby="receipts-title">
+    <div class="card-body gap-2 p-4">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3"><div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-warning/15 text-warning-content">{% include "core/_icon.html" with name="truck" css="h-5 w-5" %}</div><div><h2 id="receipts-title" class="card-title text-xl">Por recibir</h2><p class="mt-0.5 text-sm text-base-content/50">Despachos que esperan confirmación</p></div></div>
+        <a href="{% url 'transfer_list' %}?queue=receive" class="btn btn-warning btn-soft btn-sm">Ver cola</a>
+      </div>
+      <ul class="list mt-1">
+        {% for transfer in pending_receipts %}
+        <li class="list-row border-b border-base-300 px-0 py-2.5 last:border-0">
+          <div class="grid h-10 w-10 place-items-center rounded-full bg-warning/15 font-black text-warning-content">{{ transfer.destination.name|slice:":1" }}</div>
+          <div class="min-w-0">
+            <div class="truncate font-bold">{{ transfer.code }}</div>
+            <div class="flex min-w-0 items-center gap-1 text-xs text-base-content/50"><span class="truncate">{{ transfer.origin.name }}</span>{% include "core/_icon.html" with name="arrow-right" css="h-3 w-3 shrink-0" %}<span class="truncate">{{ transfer.destination.name }}</span></div>
+          </div>
+          <span class="badge {{ transfer.status|status_daisy }} badge-sm whitespace-nowrap">{{ transfer.get_status_display }}</span>
+          <a href="{% url 'transfer_detail' transfer.uuid %}?flow=1" class="btn btn-circle btn-info btn-soft btn-sm" aria-label="Abrir {{ transfer.code }}">{% include "core/_icon.html" with name="arrow-right" %}</a>
+        </li>
+        {% empty %}
+        <li class="flex items-center justify-center gap-3 py-5 text-left">
+          <div class="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-success/15 text-success">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m5 13 4 4L19 7" /></svg>
+          </div>
+          <div><div class="font-bold">Recepciones al día</div><p class="mt-0.5 text-sm text-base-content/50">No hay despachos pendientes.</p></div>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </section>
+
+  <section class="card border border-base-300 bg-base-100 shadow-sm xl:col-span-3" aria-labelledby="closure-title">
+    <div class="card-body gap-3 p-4">
+      <div class="flex items-center gap-2"><div class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-success/15 text-success">{% include "core/_icon.html" with name="package-check" css="h-5 w-5" %}</div><div><h2 id="closure-title" class="card-title">Cumplimiento</h2><p class="mt-0.5 text-xs text-base-content/50">Traspasos cerrados</p></div></div>
+      <div class="flex items-center justify-between gap-3">
+        <div class="relative grid h-24 w-24 shrink-0 place-items-center">
+          <div class="absolute inset-0 rounded-full border-[.55rem] border-base-200" aria-hidden="true"></div>
+          <div class="radial-progress text-success" style="--value:{{ closure_rate }}; --size:6rem; --thickness:.55rem" aria-valuenow="{{ closure_rate }}" role="progressbar"><span class="text-2xl font-black text-base-content">{{ closure_rate }}%</span></div>
+        </div>
+        <div class="flex min-w-0 flex-1 flex-col items-start gap-2"><div class="text-sm font-bold">Avance de cierre</div><a href="{% url 'transfer_list' %}?status=CLOSED" class="btn btn-success btn-soft btn-sm">Revisar cerrados</a></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card border border-base-300 bg-base-100 shadow-sm xl:col-span-3" aria-labelledby="commercial-title">
+    <div class="card-body gap-3 p-4">
+      <div class="flex items-center gap-2"><div class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent/15 text-accent">{% include "core/_icon.html" with name="check" css="h-5 w-5" %}</div><div><h2 id="commercial-title" class="card-title">Conciliación</h2><p class="mt-0.5 text-xs text-base-content/50">Registro en sistema comercial</p></div></div>
+      <div class="flex items-center justify-between gap-3">
+        <div class="relative grid h-24 w-24 shrink-0 place-items-center">
+          <div class="absolute inset-0 rounded-full border-[.55rem] border-base-200" aria-hidden="true"></div>
+          <div class="radial-progress text-accent" style="--value:{{ commercial_rate }}; --size:6rem; --thickness:.55rem" aria-valuenow="{{ commercial_rate }}" role="progressbar"><span class="text-2xl font-black text-base-content">{{ commercial_rate }}%</span></div>
+        </div>
+        <div class="flex min-w-0 flex-1 flex-col items-start gap-2">
+          <div class="text-sm text-base-content/55"><strong class="text-base-content">{{ commercial_registered }}</strong> de {{ commercial_total }}</div>
+          {% if pending_commercial %}<span class="badge badge-warning badge-soft badge-sm">{{ pending_commercial }} pendientes</span>{% endif %}
+          <a href="{% url 'transfer_list' %}?commercial=pending" class="btn btn-warning btn-soft btn-sm">Revisar pendientes</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="min-w-0 xl:col-span-6" aria-labelledby="activity-title">
+      <header class="flex items-center justify-between gap-2 px-1 pb-2">
+        <div class="flex items-center gap-2"><div class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-info/15 text-info">{% include "core/_icon.html" with name="chart" css="h-5 w-5" %}</div><div><h2 id="activity-title" class="font-black">Actividad reciente</h2><p class="mt-0.5 text-xs text-base-content/50">Últimos movimientos dentro de tu alcance</p></div></div>
+        <a href="{% url 'transfer_list' %}" class="btn btn-info btn-soft btn-sm">Ver todos</a>
+      </header>
+      <div class="overflow-x-auto pb-2">
+        <table class="table premium-table table-sm">
+          <thead class="bg-info/10"><tr><th>Traspaso</th><th>Ruta</th><th>Estado</th><th class="text-right">Acción</th></tr></thead>
+          <tbody>
+          {% for transfer in recent|slice:":5" %}
+            <tr>
+              <td><div class="font-bold">{{ transfer.code }}</div><div class="text-xs opacity-45">{{ transfer.updated_at|date:"d/m H:i" }}</div></td>
+              <td><div class="max-w-32 truncate">{{ transfer.origin.name }}</div><div class="max-w-32 truncate text-xs opacity-45">a {{ transfer.destination.name }}</div></td>
+              <td><span class="badge {{ transfer.status|status_daisy }} badge-sm whitespace-nowrap">{{ transfer.get_status_display }}</span></td>
+              <td class="text-right"><a href="{% url 'transfer_detail' transfer.uuid %}?flow=1" class="btn btn-circle btn-info btn-soft btn-sm" aria-label="Abrir {{ transfer.code }}">{% include "core/_icon.html" with name="external" %}</a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="py-12 text-center"><div class="font-bold">Todavía no hay actividad</div><p class="mt-1 text-sm opacity-50">Los movimientos aparecerán aquí.</p></div></td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,46 @@
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_DEBUG: "1"
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1,[::1]"
+      DJANGO_SECRET_KEY: "local-development-key-change-me"
+      GOTES_PUBLIC_URL: "${GOTES_PUBLIC_URL:-http://localhost:8000}"
+      DJANGO_EMAIL_BACKEND: "${DJANGO_EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}"
+      DJANGO_EMAIL_HOST: "${DJANGO_EMAIL_HOST:-}"
+      DJANGO_EMAIL_PORT: "${DJANGO_EMAIL_PORT:-587}"
+      DJANGO_EMAIL_HOST_USER: "${DJANGO_EMAIL_HOST_USER:-}"
+      DJANGO_EMAIL_HOST_PASSWORD: "${DJANGO_EMAIL_HOST_PASSWORD:-}"
+      DJANGO_EMAIL_USE_TLS: "${DJANGO_EMAIL_USE_TLS:-1}"
+      DJANGO_DEFAULT_FROM_EMAIL: "${DJANGO_DEFAULT_FROM_EMAIL:-}"
+      GOTES_EVIDENCE_MAX_FILE_SIZE_MB: "${GOTES_EVIDENCE_MAX_FILE_SIZE_MB:-5}"
+    volumes:
+      - gotes_data:/app/.data
+    restart: unless-stopped
+
+  email_worker:
+    build: .
+    command: ["python", "manage.py", "send_notification_emails", "--watch", "--interval", "30"]
+    environment:
+      DJANGO_DEBUG: "1"
+      DJANGO_SECRET_KEY: "local-development-key-change-me"
+      GOTES_PUBLIC_URL: "${GOTES_PUBLIC_URL:-http://localhost:8000}"
+      DJANGO_EMAIL_BACKEND: "${DJANGO_EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}"
+      DJANGO_EMAIL_HOST: "${DJANGO_EMAIL_HOST:-}"
+      DJANGO_EMAIL_PORT: "${DJANGO_EMAIL_PORT:-587}"
+      DJANGO_EMAIL_HOST_USER: "${DJANGO_EMAIL_HOST_USER:-}"
+      DJANGO_EMAIL_HOST_PASSWORD: "${DJANGO_EMAIL_HOST_PASSWORD:-}"
+      DJANGO_EMAIL_USE_TLS: "${DJANGO_EMAIL_USE_TLS:-1}"
+      DJANGO_DEFAULT_FROM_EMAIL: "${DJANGO_DEFAULT_FROM_EMAIL:-}"
+      GOTES_EVIDENCE_MAX_FILE_SIZE_MB: "${GOTES_EVIDENCE_MAX_FILE_SIZE_MB:-5}"
+    volumes:
+      - gotes_data:/app/.data
+    depends_on:
+      - web
+    restart: unless-stopped
+
+volumes:
+  gotes_data:
+    name: gotes_gots_data

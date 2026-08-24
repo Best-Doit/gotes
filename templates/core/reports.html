@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% load core_tags %}
+{% block title %}Reportes · GOTES{% endblock %}
+{% block content %}
+<header class="flex flex-wrap items-start justify-between gap-3 border-b border-base-300 px-1 pb-3">
+  <div><h1 class="text-xl font-black">Resumen operativo</h1><p class="mt-0.5 text-sm text-base-content/50">Carga del flujo, puntos críticos y desempeño por sucursal.</p></div>
+  <a href="{% url 'transfer_export_csv' %}?{% if date_from %}date_from={{ date_from }}{% endif %}{% if date_to %}{% if date_from %}&{% endif %}date_to={{ date_to }}{% endif %}" class="btn btn-info btn-soft btn-sm">{% include "core/_icon.html" with name="download" %}Exportar CSV</a>
+</header>
+
+<form method="get" class="grid gap-2 border-b border-base-300 py-3 sm:grid-cols-[minmax(10rem,1fr)_minmax(10rem,1fr)_auto_auto] sm:items-end" aria-label="Filtros del reporte">
+  <fieldset class="fieldset min-w-0 py-0"><legend class="fieldset-legend">Desde</legend><input type="date" name="date_from" value="{{ date_from }}" class="input input-sm w-full"></fieldset>
+  <fieldset class="fieldset min-w-0 py-0"><legend class="fieldset-legend">Hasta</legend><input type="date" name="date_to" value="{{ date_to }}" class="input input-sm w-full"></fieldset>
+  <button class="btn btn-info btn-soft btn-sm">{% include "core/_icon.html" with name="filter" %}Aplicar período</button>
+  {% if date_from or date_to %}<a href="{% url 'reports' %}" class="btn btn-ghost btn-sm">Limpiar</a>{% endif %}
+</form>
+{% if invalid_date_filter %}<div role="alert" class="alert alert-warning alert-soft mt-3 py-2 text-sm">{% include "core/_icon.html" with name="alert" %}<span>Una de las fechas no es válida y fue ignorada.</span></div>{% endif %}
+
+<div class="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Indicadores principales">
+  <section class="card card-sm border border-base-300 bg-base-100 shadow-sm">
+    <div class="card-body flex-row items-center gap-3">
+      <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/15 text-primary">{% include "core/_icon.html" with name="chart" css="h-5 w-5" %}</div>
+      <div><div class="text-xs font-semibold text-base-content/55">Traspasos del período</div><div class="text-2xl font-black tabular-nums">{{ total }}</div><div class="text-xs text-base-content/45">{{ active_total }} activos</div></div>
+    </div>
+  </section>
+  <section class="card card-sm border border-base-300 bg-base-100 shadow-sm">
+    <div class="card-body flex-row items-center gap-3">
+      <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-info/15 text-info">{% include "core/_icon.html" with name="truck" css="h-5 w-5" %}</div>
+      <div><div class="text-xs font-semibold text-base-content/55">En ruta</div><div class="text-2xl font-black tabular-nums text-info">{{ in_transit }}</div><div class="text-xs text-base-content/45">Esperan recepción</div></div>
+    </div>
+  </section>
+  <section class="card card-sm border border-base-300 bg-base-100 shadow-sm">
+    <div class="card-body flex-row items-center gap-3">
+      <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-success/15 text-success">{% include "core/_icon.html" with name="package-check" css="h-5 w-5" %}</div>
+      <div><div class="text-xs font-semibold text-base-content/55">Recepcionados</div><div class="text-2xl font-black tabular-nums text-success">{{ received_total }}</div><div class="text-xs text-base-content/45">Incluye cerrados</div></div>
+    </div>
+  </section>
+  <section class="card card-sm border border-base-300 bg-base-100 shadow-sm">
+    <div class="card-body flex-row items-center gap-3">
+      <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-error/15 text-error">{% include "core/_icon.html" with name="alert" css="h-5 w-5" %}</div>
+      <div><div class="text-xs font-semibold text-base-content/55">Incidencias abiertas</div><div class="text-2xl font-black tabular-nums {% if open_incidents %}text-error{% endif %}">{{ open_incidents }}</div><div class="text-xs text-base-content/45">Requieren seguimiento</div></div>
+    </div>
+  </section>
+</div>
+
+<div class="mt-3 grid gap-3 xl:grid-cols-12">
+  <section class="card border border-base-300 bg-base-100 shadow-sm xl:col-span-7" aria-labelledby="flow-map-title">
+    <div class="card-body gap-4 p-4">
+      <header><h2 id="flow-map-title" class="card-title">Mapa de carga del flujo</h2><p class="text-sm text-base-content/50">Muestra en qué etapa están concentrados los traspasos activos.</p></header>
+
+      <div class="overflow-x-auto pb-1">
+        <ul class="steps steps-horizontal min-w-[34rem] w-full" aria-label="Etapas del flujo operativo">
+          {% for stage in flow_stages %}
+          <li class="step {{ stage.step_class }}" data-content="{{ stage.total }}"><span class="mt-1 text-xs font-bold">{{ stage.label }}</span></li>
+          {% endfor %}
+        </ul>
+      </div>
+
+      <div>
+        <div class="flex h-5 overflow-hidden rounded-field bg-base-200" role="img" aria-label="Distribución porcentual de traspasos activos por etapa">
+          {% for stage in flow_stages %}{% if stage.total %}<div class="{{ stage.bar_class }} min-w-1 border-r border-base-100/60 last:border-0" style="width: {{ stage.percentage }}%" title="{{ stage.label }}: {{ stage.total }} ({{ stage.percentage }}%)"></div>{% endif %}{% endfor %}
+        </div>
+        <div class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+          {% for stage in flow_stages %}
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 shrink-0 rounded-full {{ stage.bar_class }}"></span><span class="truncate text-xs font-bold">{{ stage.label }}</span></div>
+            <div class="pl-4 text-xs text-base-content/50"><strong class="text-base-content">{{ stage.percentage }}%</strong> · {{ stage.total }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="border-t border-base-300 pt-3">
+        <div class="mb-2 text-xs font-bold uppercase tracking-wide text-base-content/45">Detalle por estado</div>
+        <div class="flex flex-wrap gap-2">
+          {% for item in statuses %}
+          <a href="{% url 'transfer_list' %}?status={{ item.value }}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="badge {{ item.value|status_daisy }} badge-soft gap-1.5 py-3"><span>{{ item.label }}</span><strong>{{ item.total }}</strong></a>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card border border-base-300 bg-base-100 shadow-sm xl:col-span-5" aria-labelledby="process-control-title">
+    <div class="card-body gap-4 p-4">
+      <header><h2 id="process-control-title" class="card-title">Control del proceso</h2><p class="text-sm text-base-content/50">Avance real de los hitos que completan el traspaso.</p></header>
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div class="min-w-0"><div class="radial-progress text-success" style="--value:{{ closure_rate }}; --size:5.25rem; --thickness:.5rem" aria-valuenow="{{ closure_rate }}" role="progressbar"><span class="text-sm font-black text-base-content">{{ closure_rate }}%</span></div><div class="mt-2 text-xs font-bold">Cierre</div><div class="text-xs text-base-content/45">{{ closed_total }} completados</div></div>
+        <div class="min-w-0"><div class="radial-progress text-accent" style="--value:{{ commercial_rate }}; --size:5.25rem; --thickness:.5rem" aria-valuenow="{{ commercial_rate }}" role="progressbar"><span class="text-sm font-black text-base-content">{{ commercial_rate }}%</span></div><div class="mt-2 text-xs font-bold">Conciliación</div><div class="text-xs text-base-content/45">{{ reconciled_total }} registrados</div></div>
+        <div class="min-w-0"><div class="radial-progress text-info" style="--value:{{ conformity_rate }}; --size:5.25rem; --thickness:.5rem" aria-valuenow="{{ conformity_rate }}" role="progressbar"><span class="text-sm font-black text-base-content">{{ conformity_rate }}%</span></div><div class="mt-2 text-xs font-bold">Conformidad</div><div class="text-xs text-base-content/45">{{ conforming_total }} sin diferencias</div></div>
+      </div>
+      <div class="border-t border-base-300 pt-3 text-xs text-base-content/50">Los porcentajes usan únicamente movimientos aplicables a cada hito.</div>
+    </div>
+  </section>
+
+  <section class="card border border-base-300 bg-base-100 shadow-sm xl:col-span-8" aria-labelledby="branch-load-title">
+    <div class="card-body gap-3 p-4">
+      <header><h2 id="branch-load-title" class="card-title">Carga operativa por sucursal</h2><p class="text-sm text-base-content/50">Compara salidas, entradas asignadas y recepciones confirmadas.</p></header>
+      <div class="divide-y divide-base-300">
+        {% for row in branch_rows %}
+        <div class="py-3 first:pt-0 last:pb-0">
+          <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div><span class="font-bold">{{ row.branch.name }}</span><span class="ml-1 text-xs text-base-content/45">{{ row.branch.code }}</span></div>
+            <div class="flex gap-1.5">{% if row.pending_receipt %}<span class="badge badge-warning badge-soft badge-sm">{{ row.pending_receipt }} por recibir</span>{% endif %}{% if row.differences %}<span class="badge badge-error badge-soft badge-sm">{{ row.differences }} con diferencias</span>{% endif %}</div>
+          </div>
+          <div class="grid gap-x-3 gap-y-1.5 sm:grid-cols-[5.5rem_minmax(0,1fr)_2rem] sm:items-center">
+            <span class="text-xs font-semibold text-base-content/55">Salidas</span><progress class="progress progress-info" value="{{ row.sent }}" max="{{ branch_max }}" aria-label="Salidas de {{ row.branch.name }}: {{ row.sent }}"></progress><strong class="text-right text-xs tabular-nums">{{ row.sent }}</strong>
+            <span class="text-xs font-semibold text-base-content/55">Entradas</span><progress class="progress progress-warning" value="{{ row.incoming }}" max="{{ branch_max }}" aria-label="Entradas de {{ row.branch.name }}: {{ row.incoming }}"></progress><strong class="text-right text-xs tabular-nums">{{ row.incoming }}</strong>
+            <span class="text-xs font-semibold text-base-content/55">Recibidos</span><progress class="progress progress-success" value="{{ row.received }}" max="{{ branch_max }}" aria-label="Recepciones de {{ row.branch.name }}: {{ row.received }}"></progress><strong class="text-right text-xs tabular-nums">{{ row.received }}</strong>
+          </div>
+          <div class="mt-2 text-right text-xs text-base-content/45">Conformidad <strong class="text-base-content">{{ row.conformity_rate }}%</strong> · {{ row.closed }} cerrados</div>
+        </div>
+        {% empty %}<div class="py-8 text-center text-sm text-base-content/50">No hay sucursales activas dentro de tu alcance.</div>{% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <section class="card border border-base-300 bg-base-100 shadow-sm xl:col-span-4" aria-labelledby="attention-title">
+    <div class="card-body gap-3 p-4">
+      <header><h2 id="attention-title" class="card-title">Puntos de atención</h2><p class="text-sm text-base-content/50">Colas que requieren intervención del equipo.</p></header>
+      <dl class="divide-y divide-base-300">
+        <div class="flex items-center justify-between gap-3 py-3"><div><dt class="font-bold">Incidencias abiertas</dt><dd class="text-xs text-base-content/50">Sin resolución registrada</dd></div><span class="badge {% if open_incidents %}badge-error{% else %}badge-success badge-outline{% endif %}">{{ open_incidents }}</span></div>
+        <div class="flex items-center justify-between gap-3 py-3"><div><dt class="font-bold">Conciliaciones pendientes</dt><dd class="text-xs text-base-content/50">Recepcionados sin referencia</dd></div><span class="badge {% if pending_commercial %}badge-warning{% else %}badge-success badge-outline{% endif %}">{{ pending_commercial }}</span></div>
+        <div class="flex items-center justify-between gap-3 py-3"><div><dt class="font-bold">Movimientos cancelados</dt><dd class="text-xs text-base-content/50">Fuera del flujo activo</dd></div><span class="badge {% if cancelled_total %}badge-neutral{% else %}badge-ghost{% endif %}">{{ cancelled_total }}</span></div>
+      </dl>
+      <a href="{% url 'transfer_list' %}?commercial=pending" class="btn btn-warning btn-soft btn-sm">Revisar conciliaciones{% include "core/_icon.html" with name="arrow-right" %}</a>
+    </div>
+  </section>
+</div>
+{% endblock %}

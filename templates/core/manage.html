@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · GOTES{% endblock %}
+{% block content %}
+<section class="min-w-0" aria-labelledby="manage-list-title">
+    <header class="flex flex-wrap items-center justify-between gap-3 px-1 pb-2">
+      <div>
+        <h2 id="manage-list-title" class="text-xl font-black">Listado de {{ title|lower }}</h2>
+        <p class="text-sm text-base-content/50">Consulta los registros y edita únicamente los que estén bajo tu administración.</p>
+      </div>
+      <div class="flex flex-wrap items-center justify-end gap-2">
+        <span class="badge badge-neutral badge-outline badge-sm">{{ items.count }} registros</span>
+        {% if read_only %}<span class="badge badge-info badge-outline badge-sm">Solo lectura</span>{% else %}
+        {% if title == "Productos" %}<a href="{% url 'manage_products' %}?importar=1" class="btn btn-info btn-soft btn-sm px-4" onclick="event.preventDefault(); document.getElementById('product-import-modal').showModal()">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2" /></svg>
+          Importar Excel
+        </a>{% endif %}
+        {% if title == "Sucursales" %}<a href="{% url 'manage_branches' %}?nuevo=1" class="btn btn-primary btn-soft btn-sm px-4">{% elif title == "Productos" %}<a href="{% url 'manage_products' %}?nuevo=1" class="btn btn-primary btn-soft btn-sm px-4">{% else %}<a href="{% url 'manage_users' %}?nuevo=1" class="btn btn-primary btn-soft btn-sm px-4">{% endif %}
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+          {% if title == "Sucursales" %}Nueva sucursal{% elif title == "Productos" %}Nuevo producto{% else %}Nuevo usuario{% endif %}
+        </a>
+        {% endif %}
+      </div>
+    </header>
+
+    <div class="overflow-x-auto pb-2">
+      <table class="table premium-table table-sm">
+        {% if title == "Sucursales" %}
+        <thead><tr><th>Código</th><th>Sucursal</th><th>Dirección</th><th>Teléfono</th><th>Estado</th><th class="text-right">Acción</th></tr></thead>
+        <tbody>
+          {% for item in items %}<tr class="hover:bg-base-200/60"><td class="font-black">{{ item.code }}</td><td class="font-semibold">{{ item.name }}</td><td class="min-w-48 text-base-content/60">{{ item.address|default:"—" }}</td><td class="whitespace-nowrap">{{ item.phone|default:"—" }}</td><td><span class="badge {% if item.is_active %}badge-success badge-outline{% else %}badge-ghost{% endif %} badge-sm">{% if item.is_active %}Activa{% else %}Inactiva{% endif %}</span></td><td class="text-right">{% if read_only %}<span class="text-base-content/35">—</span>{% else %}<a href="{% url edit_url_name item.pk %}" class="btn btn-circle btn-info btn-soft btn-sm" aria-label="Editar {{ item.name }}">{% include "core/_icon.html" with name="edit" %}</a>{% endif %}</td></tr>
+          {% empty %}<tr><td colspan="6"><div class="py-14 text-center"><div class="font-bold">No hay sucursales registradas</div><p class="mt-1 text-sm text-base-content/50">Crea la primera con el botón superior.</p></div></td></tr>{% endfor %}
+        </tbody>
+        {% elif title == "Productos" %}
+        <thead><tr><th>Código</th><th>Producto</th><th>Categoría</th><th class="text-right">Acción</th></tr></thead>
+        <tbody>
+          {% for item in items %}<tr class="hover:bg-base-200/60"><td class="font-black">{{ item.code }}</td><td class="font-semibold">{{ item.name }}</td><td><span class="badge badge-info badge-outline badge-sm">{{ item.category }}</span></td><td class="text-right">{% if read_only %}<span class="text-base-content/35">—</span>{% else %}<a href="{% url edit_url_name item.pk %}" class="btn btn-circle btn-info btn-soft btn-sm" aria-label="Editar {{ item.name }}">{% include "core/_icon.html" with name="edit" %}</a>{% endif %}</td></tr>
+          {% empty %}<tr><td colspan="4"><div class="py-14 text-center"><div class="font-bold">No hay productos registrados</div><p class="mt-1 text-sm text-base-content/50">Crea el primero con el botón superior.</p></div></td></tr>{% endfor %}
+        </tbody>
+        {% else %}
+        <thead><tr><th>Usuario</th><th>Nombre</th><th>Sucursal</th><th>Rol</th><th>Estado</th><th class="text-right">Acción</th></tr></thead>
+        <tbody>
+          {% for item in items %}<tr class="hover:bg-base-200/60"><td><div class="font-black">{{ item.username }}</div><div class="text-xs text-base-content/45">{{ item.email|default:"Sin correo" }}</div></td><td class="font-semibold">{{ item.get_full_name|default:"—" }}</td><td>{{ item.branch.name|default:"Sin asignar" }}</td><td>{% if item.role %}<span class="badge badge-info badge-outline badge-sm">{{ item.get_role_display }}</span>{% else %}<span class="badge badge-warning badge-outline badge-sm">Pendiente de asignación</span>{% endif %}</td><td><span class="badge {% if item.is_active %}badge-success badge-outline{% else %}badge-ghost{% endif %} badge-sm">{% if item.is_active %}Activo{% else %}Inactivo{% endif %}</span></td><td class="text-right">{% if not read_only and item.role != 'COMPANY_ADMIN' %}<a href="{% url edit_url_name item.pk %}" class="btn btn-circle btn-info btn-soft btn-sm" aria-label="Editar {{ item.username }}">{% include "core/_icon.html" with name="edit" %}</a>{% else %}<span class="badge badge-ghost badge-sm">Solo lectura</span>{% endif %}</td></tr>
+          {% empty %}<tr><td colspan="6"><div class="py-14 text-center"><div class="font-bold">No hay usuarios registrados</div><p class="mt-1 text-sm text-base-content/50">Crea el primero con el botón superior.</p></div></td></tr>{% endfor %}
+        </tbody>
+        {% endif %}
+      </table>
+    </div>
+</section>
+
+{% if not read_only %}<dialog id="manage-form-modal" class="modal modal-bottom sm:modal-middle">
+	  <div class="modal-box premium-modal flex max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] flex-col overflow-hidden rounded-[1.25rem] p-0 sm:max-h-[90dvh] sm:w-full sm:max-w-lg">
+    <form method="post" class="flex min-h-0 flex-1 flex-col">{% csrf_token %}
+	      <header class="flex shrink-0 items-start justify-between gap-3 border-b border-base-300 px-5 pb-2 pt-4 sm:px-6 sm:pt-5">
+        <div class="min-w-0"><h2 class="text-lg font-semibold tracking-tight">{% if form.instance.pk %}Editar{% else %}Registrar{% endif %} {% if title == "Sucursales" %}sucursal{% elif title == "Productos" %}producto{% else %}usuario{% endif %}</h2><p class="mt-0.5 text-xs text-base-content/55">{% if title == "Usuarios" %}Crea la cuenta básica; el rol y la sucursal se vinculan desde Asignaciones.{% else %}Completa la información y guarda los cambios.{% endif %}</p></div>
+        <button type="button" class="modal-close btn btn-circle btn-ghost btn-sm shrink-0" onclick="this.closest('dialog').close()" aria-label="Cerrar"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 6l12 12M18 6 6 18" /></svg></button>
+      </header>
+      <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-2 sm:px-6 sm:py-3">
+        <div class="grid gap-y-2">
+          {% if form.non_field_errors %}<div role="alert" class="alert alert-error alert-soft py-2 text-sm">{{ form.non_field_errors }}</div>{% endif %}
+          {% for field in form %}
+            {% if field.field.widget.input_type == 'checkbox' %}
+            <fieldset class="fieldset min-w-0"><label class="label cursor-pointer justify-start gap-3 border-y border-base-300 py-2">{{ field }}<span class="font-semibold">{{ field.label }}</span></label>{% if field.help_text %}<p class="label block break-words text-xs">{{ field.help_text|safe }}</p>{% endif %}{% if field.errors %}<p class="label block text-error">{{ field.errors|striptags }}</p>{% endif %}</fieldset>
+            {% else %}
+            <fieldset class="fieldset min-w-0"><legend class="fieldset-legend">{{ field.label }}</legend>{{ field }}{% if field.help_text %}<p class="label block break-words text-xs">{{ field.help_text|safe }}</p>{% endif %}{% if field.errors %}<p class="label block text-error">{{ field.errors|striptags }}</p>{% endif %}</fieldset>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+	      <footer class="modal-action m-0 grid shrink-0 grid-cols-2 gap-2 border-t border-base-300 px-5 pb-4 pt-2 sm:flex sm:justify-end sm:px-6 sm:pb-5">
+        {% if title == "Sucursales" %}<a href="{% url 'manage_branches' %}" class="btn btn-outline btn-sm">Cancelar</a>{% elif title == "Productos" %}<a href="{% url 'manage_products' %}" class="btn btn-outline btn-sm">Cancelar</a>{% else %}<a href="{% url 'manage_users' %}" class="btn btn-outline btn-sm">Cancelar</a>{% endif %}
+	        <button class="btn btn-success btn-soft btn-sm sm:min-w-28">{% include "core/_icon.html" with name="save" %}Guardar</button>
+      </footer>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop bg-neutral/20 backdrop-blur-[1px]"><button>Cerrar</button></form>
+</dialog>{% endif %}
+
+{% if not read_only %}{% if request.GET.nuevo or form.instance.pk or form.errors %}<script>document.getElementById('manage-form-modal').showModal()</script>{% endif %}{% endif %}
+
+{% if title == "Productos" and not read_only %}
+<dialog id="product-import-modal" class="modal modal-bottom sm:modal-middle">
+	  <div class="modal-box premium-modal flex max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] flex-col overflow-hidden rounded-[1.25rem] p-0 sm:max-h-[90dvh] sm:w-full sm:max-w-xl">
+    <form method="post" action="{% url 'product_import' %}" enctype="multipart/form-data" class="flex min-h-0 flex-1 flex-col">{% csrf_token %}
+      <header class="flex shrink-0 items-start justify-between gap-3 px-5 pb-2 pt-4 sm:px-6 sm:pt-5">
+        <div><h2 class="text-lg font-semibold tracking-tight">Importar productos</h2><p class="mt-0.5 text-xs text-base-content/55">Carga códigos, nombres y categorías desde Excel.</p></div>
+        <button type="button" class="modal-close btn btn-circle btn-ghost btn-sm shrink-0" onclick="this.closest('dialog').close()" aria-label="Cerrar"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 6l12 12M18 6 6 18" /></svg></button>
+      </header>
+
+      <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-2 sm:px-6 sm:py-3">
+        <div class="grid gap-3">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-y border-base-300 py-2">
+            <div><div class="text-sm font-bold">Formato requerido</div><div class="text-xs text-base-content/50">Código · Nombre · Categoría</div></div>
+            <a href="{% url 'product_import_template' %}" class="btn btn-info btn-soft btn-sm">Descargar plantilla</a>
+          </div>
+
+          <fieldset class="fieldset min-w-0">
+            <legend class="fieldset-legend">{{ import_form.file.label }}</legend>
+            {{ import_form.file }}
+            <p class="label block text-xs">{{ import_form.file.help_text }} Máximo 5.000 productos.</p>
+            {% if import_form.file.errors %}<p class="label block text-error">{{ import_form.file.errors|striptags }}</p>{% endif %}
+          </fieldset>
+
+          <div role="alert" class="alert alert-info alert-soft py-2 text-sm">
+            <span>Los códigos nuevos se crean y los existentes actualizan nombre y categoría. Si hay errores, no se guarda ninguna fila.</span>
+          </div>
+
+          {% if import_errors %}
+          <div>
+            <div class="mb-2 flex flex-wrap items-center justify-between gap-2"><div><div class="font-bold text-error">Corrige el archivo</div><div class="text-xs text-base-content/50">No se importó ningún producto.</div></div><span class="badge badge-error badge-outline badge-sm">{{ import_errors|length }} errores</span></div>
+            {% if errors_truncated %}<div role="alert" class="alert alert-warning alert-soft mb-2 py-2 text-sm">Se muestran únicamente los primeros 100 errores.</div>{% endif %}
+            <div class="max-h-48 overflow-auto border-y border-base-300">
+              <table class="table table-sm">
+                <thead><tr><th class="w-20">Fila</th><th>Problema</th></tr></thead>
+                <tbody>{% for error in import_errors %}<tr><td class="font-black tabular-nums">{{ error.line }}</td><td class="text-error">{{ error.message }}</td></tr>{% endfor %}</tbody>
+              </table>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <footer class="modal-action m-0 grid shrink-0 grid-cols-2 gap-2 px-5 pb-4 pt-2 sm:flex sm:justify-end sm:px-6 sm:pb-5">
+        <button type="button" class="btn btn-outline btn-sm" onclick="this.closest('dialog').close()">Cancelar</button>
+        <button type="submit" class="btn btn-primary btn-soft btn-sm sm:min-w-32">Validar e importar</button>
+      </footer>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop bg-neutral/20 backdrop-blur-[1px]"><button>Cerrar</button></form>
+</dialog>
+{% if request.GET.importar or show_import_modal or import_form.errors or import_errors %}<script>document.getElementById('product-import-modal').showModal()</script>{% endif %}
+{% endif %}
+{% endblock %}
