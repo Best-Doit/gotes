@@ -54,7 +54,9 @@ htmlcov/
 venv/
 
 # Herramientas locales del editor/agente
+.agents/
 .codex/
+skills-lock.json
 .idea/
 .vscode/
 

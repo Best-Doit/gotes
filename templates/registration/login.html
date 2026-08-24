@@ -1,10 +1,16 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Ingresar · GOTES{% endblock %}
 {% block content %}
 <div class="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md items-center">
   <div class="card w-full border border-base-300 bg-base-100 shadow-lg">
     <div class="card-body gap-5 p-6 sm:p-8">
-      <div class="flex items-center gap-3"><div class="grid h-12 w-12 place-items-center rounded-selector bg-primary text-primary-content shadow-sm"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h11m0 0-3-3m3 3-3 3M17 17H6m0 0 3 3m-3-3 3-3" /></svg></div><div><h1 class="text-2xl font-black tracking-tight">Bienvenido a GOTES</h1><p class="text-sm text-base-content/50">Control histórico de traspasos</p></div></div>
+      <div class="flex items-center gap-4">
+        <div class="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-box bg-base-100 shadow-sm" aria-hidden="true">
+          <img src="{% static 'core/logo-gotes.png' %}" alt="" class="h-full w-full scale-[1.65] object-cover">
+        </div>
+        <div><h1 class="text-2xl font-black tracking-tight">Bienvenido a GOTES</h1><p class="text-sm text-base-content/50">Control histórico de traspasos</p></div>
+      </div>
       <form method="post" class="space-y-3">{% csrf_token %}{% if form.non_field_errors %}<div role="alert" class="alert alert-error alert-soft py-2">Usuario o contraseña incorrectos.</div>{% endif %}{% for field in form %}<fieldset class="fieldset"><legend class="fieldset-legend">{{ field.label }}</legend>{{ field }}{% if field.errors %}<p class="label text-error">{{ field.errors|striptags }}</p>{% endif %}</fieldset>{% endfor %}<button class="btn btn-primary btn-soft btn-block mt-3">Ingresar</button></form>
       <p class="text-center text-xs text-base-content/40">Acceso exclusivo para usuarios autorizados.</p>
     </div>
