@@ -20,8 +20,8 @@ Los datos de SQLite y las evidencias viven en el volumen persistente de GOTES.
 Producción usa PostgreSQL, Gunicorn, WhiteNoise y un worker independiente para los correos. El contenedor web escucha internamente en `8000` y Docker publica la aplicación en el puerto `8009` del servidor.
 
 ```bash
-cp .env.prod.example .env.prod
-# Edita .env.prod y reemplaza dominio, claves y credenciales SMTP.
+cp .env.prod.example .env
+# Edita .env y reemplaza dominio, claves y credenciales SMTP.
 docker compose -f docker-compose.prod.yml config
 docker compose -f docker-compose.prod.yml up --build -d
 docker compose -f docker-compose.prod.yml exec web python manage.py createsuperuser

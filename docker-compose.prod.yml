@@ -1,27 +1,13 @@
 services:
-  db:
-    image: postgres:16-alpine
-    env_file:
-      - ${GOTES_ENV_FILE:-.env.prod}
-    volumes:
-      - gotes_postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-    restart: unless-stopped
-
   web:
     build: .
     entrypoint: ["/app/docker-entrypoint.prod.sh"]
     command: ["gunicorn", "config.wsgi:application"]
     env_file:
-      - ${GOTES_ENV_FILE:-.env.prod}
+      - ${GOTES_ENV_FILE:-.env}
     environment:
       DJANGO_DEBUG: "0"
-      POSTGRES_HOST: db
+      POSTGRES_HOST: postgres-global
       POSTGRES_PORT: "5432"
       GOTES_DATA_DIR: /app/.data
       GOTES_MEDIA_ROOT: /app/.data/media
@@ -31,9 +17,8 @@ services:
       - "8009:8000"
     volumes:
       - gotes_media:/app/.data/media
-    depends_on:
-      db:
-        condition: service_healthy
+    networks:
+      - nr-net
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; request = urllib.request.Request('http://127.0.0.1:8000/login/', headers={'X-Forwarded-Proto': 'https'}); urllib.request.urlopen(request, timeout=5)"]
       interval: 30s
@@ -48,23 +33,26 @@ services:
     entrypoint: ["/app/docker-entrypoint.prod.sh"]
     command: ["python", "manage.py", "send_notification_emails", "--watch", "--interval", "30"]
     env_file:
-      - ${GOTES_ENV_FILE:-.env.prod}
+      - ${GOTES_ENV_FILE:-.env}
     environment:
       DJANGO_DEBUG: "0"
-      POSTGRES_HOST: db
+      POSTGRES_HOST: postgres-global
       POSTGRES_PORT: "5432"
       GOTES_DATA_DIR: /app/.data
       GOTES_MEDIA_ROOT: /app/.data/media
       RUN_MIGRATIONS: "0"
       COLLECT_STATIC: "0"
     depends_on:
-      db:
-        condition: service_healthy
       web:
         condition: service_healthy
+    networks:
+      - nr-net
     restart: unless-stopped
     stop_grace_period: 30s
 
 volumes:
-  gotes_postgres_data:
   gotes_media:
+
+networks:
+  nr-net:
+    external: true
