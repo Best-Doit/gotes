@@ -1,0 +1,26 @@
+[
+  {
+    "package": "daisyui",
+    "version": "5.7.46",
+    "source": "https://registry.npmjs.org/daisyui/-/daisyui-5.7.46.tgz",
+    "file": "daisyui.css",
+    "sha256": "ff5ac6a9196fb2d47b332bd15761d0b3439f812cde6fd0b7c0add8e5b4f7c1a6",
+    "license": "MIT"
+  },
+  {
+    "package": "@tailwindcss/browser",
+    "version": "4.3.3",
+    "source": "https://registry.npmjs.org/@tailwindcss/browser/-/browser-4.3.3.tgz",
+    "file": "tailwind-browser.js",
+    "sha256": "a60c785630a06196808cbe79e6f7bdb4abcc8f4421a47b56f29338fc84805e3b",
+    "license": "MIT"
+  },
+  {
+    "package": "alpinejs",
+    "version": "3.17.4",
+    "source": "https://registry.npmjs.org/alpinejs/-/alpinejs-3.17.4.tgz",
+    "file": "alpine.js",
+    "sha256": "232519394c6c8fdba6f362b1d9da16106db513cdbf899011f00daab4051df31c",
+    "license": "MIT"
+  }
+]

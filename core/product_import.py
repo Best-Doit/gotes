@@ -1,14 +1,23 @@
 from io import BytesIO
 import unicodedata
-from zipfile import BadZipFile
+from zipfile import BadZipFile, ZipFile
+from xml.etree.ElementTree import ParseError
+
+from defusedxml.ElementTree import iterparse
+from defusedxml.common import DefusedXmlException
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils.exceptions import InvalidFileException
+from openpyxl.utils.cell import coordinate_from_string, column_index_from_string
 
 
 MAX_PRODUCT_ROWS = 5000
 MAX_REPORTED_ERRORS = 100
+MAX_ARCHIVE_BYTES = 25 * 1024 * 1024
+MAX_SCANNED_ROWS = 10000
+MAX_COLUMNS = 100
+MAX_XML_ELEMENTS = 300000
 
 HEADER_ALIASES = {
     "codigo": "code",
@@ -83,15 +92,56 @@ def build_product_template():
 
 
 def parse_product_workbook(uploaded_file):
+    try:
+        _validate_archive(uploaded_file)
+        return _read_product_workbook(uploaded_file)
+    except (BadZipFile, InvalidFileException, OSError, ValueError, KeyError,
+            TypeError, IndexError, ParseError, DefusedXmlException) as error:
+        raise InvalidProductWorkbook("El archivo no es un Excel .xlsx válido o está dañado.") from error
+
+
+def _validate_archive(uploaded_file):
+    """Bound decompression and XML work before openpyxl allocates workbook data."""
+    uploaded_file.seek(0)
+    with ZipFile(uploaded_file) as archive:
+        entries = archive.infolist()
+        if len(entries) > 100 or sum(entry.file_size for entry in entries) > MAX_ARCHIVE_BYTES:
+            raise InvalidProductWorkbook("El contenido descomprimido del Excel supera el límite permitido.")
+        if len({entry.filename for entry in entries}) != len(entries) or any(entry.flag_bits & 1 for entry in entries):
+            raise InvalidProductWorkbook("El archivo contiene entradas duplicadas o cifradas.")
+        elements = 0
+        for entry in entries:
+            if not entry.filename.endswith((".xml", ".rels")):
+                continue
+            with archive.open(entry) as stream:
+                for _event, element in iterparse(stream, events=("end",), forbid_dtd=True):
+                    elements += 1
+                    if elements > MAX_XML_ELEMENTS:
+                        raise InvalidProductWorkbook("El Excel contiene demasiados elementos.")
+                    tag = element.tag.rsplit("}", 1)[-1]
+                    if tag == "row" and int(element.get("r", "0")) > MAX_SCANNED_ROWS + 1:
+                        raise InvalidProductWorkbook("El Excel contiene demasiadas filas, incluidas las vacías.")
+                    if tag == "c" and element.get("r"):
+                        column, row = coordinate_from_string(element.get("r"))
+                        if row > MAX_SCANNED_ROWS + 1 or column_index_from_string(column) > MAX_COLUMNS:
+                            raise InvalidProductWorkbook("El Excel supera el límite de filas o columnas.")
+                    element.clear()
+
+
+def _read_product_workbook(uploaded_file):
     uploaded_file.seek(0)
     try:
-        workbook = load_workbook(uploaded_file, read_only=True, data_only=True)
+        workbook = load_workbook(uploaded_file, read_only=True, data_only=True, keep_links=False)
     except (BadZipFile, InvalidFileException, OSError, ValueError) as error:
         raise InvalidProductWorkbook("El archivo no es un Excel .xlsx válido o está dañado.") from error
 
     try:
         worksheet = workbook.active
-        row_iterator = worksheet.iter_rows(values_only=True)
+        if worksheet is None:
+            raise InvalidProductWorkbook("El archivo no contiene una hoja activa.")
+        if (worksheet.max_row or 0) > MAX_SCANNED_ROWS + 1 or (worksheet.max_column or 0) > MAX_COLUMNS:
+            raise InvalidProductWorkbook("El Excel supera el límite de filas o columnas.")
+        row_iterator = worksheet.iter_rows(values_only=True, max_row=MAX_SCANNED_ROWS + 1, max_col=MAX_COLUMNS)
         headers = next(row_iterator, None)
         if not headers:
             raise InvalidProductWorkbook("El archivo está vacío.")

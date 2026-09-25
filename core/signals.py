@@ -1,7 +1,14 @@
-from django.contrib.auth.signals import user_logged_in, user_logged_out
+import logging
+from django.contrib.auth.signals import user_logged_in, user_logged_out, user_login_failed
 from django.dispatch import receiver
 
 from .services import audit
+
+
+@receiver(user_login_failed)
+def log_login_failure(sender, credentials, request, **kwargs):
+    # Never log submitted credentials or usernames.
+    logging.getLogger(__name__).warning("Intento de autenticación fallido.")
 
 
 @receiver(user_logged_in)

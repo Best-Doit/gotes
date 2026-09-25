@@ -22,6 +22,12 @@ class TimestampedModel(models.Model):
         abstract = True
 
 
+class LoginThrottle(models.Model):
+    key = models.CharField(max_length=64, primary_key=True)
+    attempts = models.PositiveIntegerField(default=0)
+    window_started = models.DateTimeField(default=timezone.now, db_index=True)
+
+
 class Company(TimestampedModel):
     code = models.SlugField(max_length=30, unique=True, verbose_name="código")
     name = models.CharField(max_length=160, verbose_name="nombre")

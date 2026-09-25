@@ -8,7 +8,7 @@ from django.core import mail
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
-from django.db import close_old_connections
+from django.db import close_old_connections, connections
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from openpyxl import Workbook, load_workbook
@@ -600,6 +600,7 @@ class TenantIsolationViewTests(TestCase):
         evidence.save(update_fields=("type",))
         dispatch_transfer(self.a_transfer, self.a_manager)
         self.client.force_login(self.a_destination_manager)
+        self.client.post(reverse("receipt_start", args=(self.a_transfer.uuid,)))
         response = self.client.get(reverse("receipt_edit", args=(self.a_transfer.uuid,)))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Productos por recibir")
@@ -1076,7 +1077,7 @@ class TenantIsolationViewTests(TestCase):
         self.assertContains(dashboard, 'class="indicator"')
         self.assertContains(dashboard, "badge badge-error badge-xs")
         self.assertNotContains(dashboard, "badge-error badge-outline badge-xs")
-        response = self.client.get(reverse("notification_open", args=(notification.pk,)))
+        response = self.client.post(reverse("notification_open", args=(notification.pk,)))
         self.assertRedirects(response, f"{reverse('transfer_detail', args=(self.a_transfer.uuid,))}?flow=1")
         notification.refresh_from_db()
         self.assertTrue(notification.is_read)
@@ -1107,7 +1108,7 @@ class SequenceConcurrencyTests(TransactionTestCase):
         try:
             return Sequence.take(self.company, Sequence.Kind.TRANSFER, 2026)
         finally:
-            close_old_connections()
+            connections.close_all()
 
     def test_sequence_values_are_unique_under_parallel_writes(self):
         with ThreadPoolExecutor(max_workers=4) as executor:

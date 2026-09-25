@@ -82,7 +82,7 @@
             {% endif %}
             <button type="button" class="btn btn-warning btn-soft btn-sm" onclick="openTransferSubflow('return-draft-modal')">Volver a borrador</button>
           {% endif %}
-          {% if request.user.branch_id == transfer.destination_id and transfer.status == 'DISPATCHED' or request.user.branch_id == transfer.destination_id and transfer.status == 'RECEIVING' %}<a href="{% url 'receipt_edit' transfer.uuid %}?flow=1" class="btn action-button btn-primary btn-sm">Abrir recepción</a>{% endif %}
+          {% if request.user.branch_id == transfer.destination_id and transfer.status == 'DISPATCHED' or request.user.branch_id == transfer.destination_id and transfer.status == 'RECEIVING' %}<form method="post" action="{% url 'receipt_start' transfer.uuid %}">{% csrf_token %}<button class="btn action-button btn-primary btn-sm">Abrir recepción</button></form>{% endif %}
           {% if request.user|can:"close" %}{% if transfer.status == 'RECEIVED' or transfer.status == 'RECEIVED_DIFFERENCES' %}<button type="button" class="btn action-button btn-success btn-sm" onclick="openTransferSubflow('close-confirm-modal')">Cerrar traspaso</button>{% endif %}{% endif %}
           {% if allowed_evidence_types %}{% if request.user.branch_id != transfer.origin_id or transfer.status != 'PREPARED' %}<button type="button" class="btn btn-info btn-soft btn-sm" onclick="openTransferSubflow('evidence-modal')">Adjuntar evidencia</button>{% endif %}{% endif %}
           {% if request.user|can:"cancel" %}{% if transfer.status != 'CLOSED' and transfer.status != 'CANCELLED' %}<button type="button" class="btn btn-error btn-soft btn-sm" onclick="openTransferSubflow('cancel-transfer-modal')">Anular movimiento</button>{% endif %}{% endif %}

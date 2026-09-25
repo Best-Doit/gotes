@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from django.core.exceptions import ImproperlyConfigured
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -10,8 +11,10 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 def env_bool(name, default=False):
     return os.environ.get(name, "1" if default else "0").strip().lower() in {"1", "true", "yes", "on"}
 
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-change-me")
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-change-me" if DEBUG else "")
+if not DEBUG and (len(SECRET_KEY) < 50 or len(set(SECRET_KEY)) < 5 or SECRET_KEY.startswith(("dev-", "django-insecure-", "reemplazar"))):
+    raise ImproperlyConfigured("DJANGO_SECRET_KEY debe ser una clave aleatoria de al menos 50 caracteres en producción.")
 ALLOWED_HOSTS = [item.strip() for item in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]").split(",") if item.strip()]
 
 INSTALLED_APPS = [
@@ -31,6 +34,8 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "core.middleware.SuspendedSessionMiddleware",
+    "core.middleware.LoginThrottleMiddleware",
     "core.middleware.SuperuserAdminOnlyMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -99,6 +104,9 @@ MEDIA_ROOT = Path(os.environ.get("GOTES_MEDIA_ROOT", os.environ.get("GOTS_MEDIA_
 MEDIA_URL = "/archivos-no-publicos/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_USER_MODEL = "core.User"
+AUTHENTICATION_BACKENDS = ["core.authentication.TenantModelBackend"]
+LOGIN_RATE_MAX_ATTEMPTS = max(1, int(os.environ.get("GOTES_LOGIN_RATE_MAX_ATTEMPTS", "30")))
+LOGIN_RATE_WINDOW_SECONDS = max(1, int(os.environ.get("GOTES_LOGIN_RATE_WINDOW_SECONDS", "900")))
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "dashboard"
 LOGOUT_REDIRECT_URL = "login"
@@ -126,10 +134,10 @@ CSRF_TRUSTED_ORIGINS = [
     for item in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
     if item.strip()
 ]
-SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", False)
-SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE", False)
-CSRF_COOKIE_SECURE = env_bool("DJANGO_CSRF_COOKIE_SECURE", False)
-SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_SECURE_HSTS_SECONDS", "0"))
+SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", not DEBUG)
+SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE", not DEBUG)
+CSRF_COOKIE_SECURE = env_bool("DJANGO_CSRF_COOKIE_SECURE", not DEBUG)
+SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_SECURE_HSTS_SECONDS", "0" if DEBUG else "31536000"))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS", False)
 SECURE_HSTS_PRELOAD = env_bool("DJANGO_SECURE_HSTS_PRELOAD", False)
 if env_bool("DJANGO_TRUST_PROXY_HEADERS", False):

@@ -19,6 +19,7 @@ urlpatterns = [
     path("traspasos/<uuid:uuid>/borrador/", views.transfer_return_draft, name="transfer_return_draft"),
     path("traspasos/<uuid:uuid>/despachar/", views.transfer_dispatch, name="transfer_dispatch"),
     path("traspasos/<uuid:uuid>/recibir/", views.receipt_edit, name="receipt_edit"),
+    path("traspasos/<uuid:uuid>/iniciar-recepcion/", views.receipt_start, name="receipt_start"),
     path("traspasos/<uuid:uuid>/confirmar-recepcion/", views.receipt_confirm, name="receipt_confirm"),
     path("traspasos/<uuid:uuid>/resolver-incidencia/", views.incident_resolve, name="incident_resolve"),
     path("traspasos/<uuid:uuid>/cerrar/", views.transfer_close, name="transfer_close"),

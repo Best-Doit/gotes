@@ -20,6 +20,22 @@ from .models import (
 from .validators import validate_evidence_content_type
 
 
+class TransferFilterForm(forms.Form):
+    origin = forms.IntegerField(required=False, min_value=1, max_value=9223372036854775807)
+    destination = forms.IntegerField(required=False, min_value=1, max_value=9223372036854775807)
+    product = forms.IntegerField(required=False, min_value=1, max_value=9223372036854775807)
+    user = forms.IntegerField(required=False, min_value=1, max_value=9223372036854775807)
+    date_from = forms.DateField(required=False, input_formats=("%Y-%m-%d",))
+    date_to = forms.DateField(required=False, input_formats=("%Y-%m-%d",))
+
+    def clean(self):
+        cleaned = super().clean()
+        start, end = cleaned.get("date_from"), cleaned.get("date_to")
+        if start and end and start > end:
+            raise forms.ValidationError("La fecha inicial no puede ser posterior a la final.")
+        return cleaned
+
+
 class StyledFormMixin:
     def _style_fields(self):
         for field in self.fields.values():
@@ -129,9 +145,20 @@ class UnexpectedReceiptItemForm(StyledFormMixin, forms.ModelForm):
 
     def __init__(self, *args, company=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.instance.is_unexpected = True
         self.fields["product"].queryset = Product.objects.filter(company=company)
-        self.fields["quantity_received"].required = False
         self._style_fields()
+
+    def clean(self):
+        cleaned = super().clean()
+        product = cleaned.get("product")
+        if product and self.instance.receipt_id:
+            receipt = self.instance.receipt
+            if receipt.transfer.items.filter(product=product).exists():
+                self.add_error("product", "Este producto ya está en el envío; ajusta su cantidad recibida.")
+            if receipt.items.filter(product=product, is_unexpected=True).exclude(pk=self.instance.pk).exists():
+                self.add_error("product", "Este producto inesperado ya está registrado.")
+        return cleaned
 
 
 UnexpectedReceiptFormSet = inlineformset_factory(
@@ -178,7 +205,23 @@ class CommercialRegistrationForm(StyledFormMixin, forms.ModelForm):
         self._style_fields()
 
 
-class BranchForm(StyledFormMixin, forms.ModelForm):
+class CompanyCatalogForm(StyledFormMixin, forms.ModelForm):
+    def __init__(self, *args, company=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if company is not None:
+            self.instance.company = company
+        self._style_fields()
+
+    def clean_code(self):
+        code = self.cleaned_data["code"]
+        if self.instance.company_id and type(self.instance).objects.filter(
+            company_id=self.instance.company_id, code=code,
+        ).exclude(pk=self.instance.pk).exists():
+            raise forms.ValidationError("Este código ya existe en tu empresa.")
+        return code
+
+
+class BranchForm(CompanyCatalogForm):
     class Meta:
         model = Branch
         fields = ("code", "name", "address", "phone", "is_active")
@@ -188,7 +231,7 @@ class BranchForm(StyledFormMixin, forms.ModelForm):
         self._style_fields()
 
 
-class ProductForm(StyledFormMixin, forms.ModelForm):
+class ProductForm(CompanyCatalogForm):
     class Meta:
         model = Product
         fields = ("code", "name", "category")

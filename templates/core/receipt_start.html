@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Recibir {{ transfer.code }} · GOTES{% endblock %}
+{% block content %}
+<section class="card bg-base-100 border border-base-300">
+  <div class="card-body">
+    <h2 class="card-title">Recibir {{ transfer.code }}</h2>
+    <p>Inicia la recepción para verificar las cantidades y adjuntar la evidencia.</p>
+    <form method="post" action="{% url 'receipt_start' transfer.uuid %}">
+      {% csrf_token %}<button class="btn">Iniciar recepción</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

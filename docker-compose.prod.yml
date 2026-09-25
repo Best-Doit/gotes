@@ -14,7 +14,7 @@ services:
       RUN_MIGRATIONS: "1"
       COLLECT_STATIC: "1"
     ports:
-      - "8009:8000"
+      - "127.0.0.1:8009:8000"
     volumes:
       - gotes_media:/app/.data/media
     networks:

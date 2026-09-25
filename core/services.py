@@ -7,6 +7,8 @@ from django.db.models import Q
 from django.forms.models import model_to_dict
 from django.utils import timezone
 
+from .authentication import active_scope, require_active_scope
+
 from .email_notifications import (
     queue_transfer_dispatched_emails,
     queue_transfer_received_emails,
@@ -40,6 +42,8 @@ def visible_transfers(user):
     queryset = Transfer.objects.select_related(
         "company", "origin", "destination", "created_by", "commercial_registration__registered_by"
     )
+    if not active_scope(user):
+        return queryset.none()
     if user.is_superuser:
         return queryset
     if not user.company_id:
@@ -57,6 +61,13 @@ def visible_transfers(user):
 
 def snapshot(instance):
     data = model_to_dict(instance)
+    if isinstance(instance, User):
+        fields = {
+            "id", "username", "first_name", "last_name", "email", "phone", "role",
+            "company", "branch", "is_active", "is_staff", "is_superuser",
+            "allow_dispatch", "allow_close", "allow_cancel", "allow_resolve_incident",
+        }
+        data = {key: value for key, value in data.items() if key in fields}
     return json.loads(json.dumps(data, default=str))
 
 
@@ -83,10 +94,11 @@ def audit(*, user, action, instance, description, request=None, before=None, aft
 
 
 def _lock_transfer(transfer):
-    return Transfer.objects.select_for_update().select_related("origin", "destination", "company").get(pk=transfer.pk)
+    return Transfer.objects.select_for_update(of=("self",)).select_related("origin", "destination", "company").get(pk=transfer.pk)
 
 
 def _ensure_branch_action(user, transfer, capability, *, destination=False):
+    require_active_scope(user)
     if not user.is_operational or user.company_id != transfer.company_id:
         raise PermissionDenied
     expected_branch = transfer.destination_id if destination else transfer.origin_id
@@ -163,6 +175,7 @@ def dispatch_transfer(transfer, user, request=None):
 
 @transaction.atomic
 def get_or_start_receipt(transfer, user, request=None):
+    require_active_scope(user)
     transfer = _lock_transfer(transfer)
     if not user.is_operational or user.company_id != transfer.company_id or user.branch_id != transfer.destination_id:
         raise PermissionDenied
@@ -254,6 +267,7 @@ def confirm_receipt(transfer, user, request=None):
 
 @transaction.atomic
 def resolve_incident(incident, user, resolution_type, resolution_text, request=None):
+    require_active_scope(user)
     incident = Incident.objects.select_for_update().select_related("transfer").get(pk=incident.pk)
     transfer = incident.transfer
     if not user.is_operational or user.company_id != transfer.company_id or user.branch_id not in {transfer.origin_id, transfer.destination_id}:
@@ -276,6 +290,7 @@ def resolve_incident(incident, user, resolution_type, resolution_text, request=N
 
 @transaction.atomic
 def close_transfer(transfer, user, request=None):
+    require_active_scope(user)
     transfer = _lock_transfer(transfer)
     if not user.is_operational or user.company_id != transfer.company_id or user.branch_id not in {transfer.origin_id, transfer.destination_id}:
         raise PermissionDenied
@@ -295,6 +310,7 @@ def close_transfer(transfer, user, request=None):
 
 @transaction.atomic
 def cancel_transfer(transfer, user, reason, request=None):
+    require_active_scope(user)
     transfer = _lock_transfer(transfer)
     if not user.is_operational or user.company_id != transfer.company_id or user.branch_id not in {transfer.origin_id, transfer.destination_id}:
         raise PermissionDenied
@@ -318,6 +334,7 @@ def cancel_transfer(transfer, user, reason, request=None):
 
 @transaction.atomic
 def save_commercial_registration(transfer, user, data, reason="", request=None):
+    require_active_scope(user)
     transfer = _lock_transfer(transfer)
     if not user.is_commercial_reconciler or user.company_id != transfer.company_id:
         raise PermissionDenied

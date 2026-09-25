@@ -149,8 +149,7 @@ def _claim_pending_deliveries(limit):
     EmailOutbox.objects.filter(
         status=EmailOutbox.Status.PROCESSING,
         updated_at__lt=stale_before,
-        attempts__lt=settings.EMAIL_OUTBOX_MAX_ATTEMPTS,
-    ).update(status=EmailOutbox.Status.FAILED, last_error="El envío anterior quedó interrumpido; se reintentará.")
+    ).update(status=EmailOutbox.Status.FAILED, last_error="El envío anterior quedó interrumpido.", updated_at=timezone.now())
 
     deliveries = list(
         EmailOutbox.objects.select_for_update()

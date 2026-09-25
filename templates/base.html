@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}GOTES{% endblock %}</title>
   <link rel="icon" type="image/png" href="{% static 'core/favicon-gotes.png' %}">
-  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css">
+  <link href="{% static 'core/vendor/daisyui.css' %}" rel="stylesheet" type="text/css">
   <style>
     [x-cloak] { display: none !important; }
     [data-theme="gotes"] {
@@ -311,8 +311,8 @@
       [data-sidebar-collapsed="true"] .sidebar-notification-badge { position: absolute; right: .15rem; top: .1rem; }
     }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="{% static 'core/vendor/tailwind-browser.js' %}"></script>
+  <script defer src="{% static 'core/vendor/alpine.js' %}"></script>
 </head>
 <body class="min-h-full bg-base-200 text-base-content">
   <div x-data="{ sidebarCollapsed: localStorage.getItem('gotes-sidebar-collapsed') === '1', toggleSidebar() { this.sidebarCollapsed = !this.sidebarCollapsed; localStorage.setItem('gotes-sidebar-collapsed', this.sidebarCollapsed ? '1' : '0') } }" :data-sidebar-collapsed="sidebarCollapsed ? 'true' : 'false'" class="{% if request.user.is_authenticated %}drawer lg:drawer-open{% endif %}">

@@ -2,14 +2,14 @@ import csv
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.exceptions import BadRequest, PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils.dateparse import parse_date
+from django.views.decorators.http import require_POST
 
 from .forms import (
     BranchForm,
@@ -21,11 +21,12 @@ from .forms import (
     ProductForm,
     TenantUserForm,
     TransferForm,
+    TransferFilterForm,
     TransferItemFormSet,
     UnexpectedReceiptFormSet,
     UserAssignmentForm,
 )
-from .models import AuditLog, Branch, Evidence, Incident, Notification, Product, ReceiptItem, Transfer, User
+from .models import AuditLog, Branch, Evidence, Incident, Notification, Product, Receipt, ReceiptItem, Transfer, User
 from .product_import import InvalidProductWorkbook, build_product_template, parse_product_workbook
 from .services import (
     audit,
@@ -63,15 +64,30 @@ def _company_management_access(request, pk):
     raise PermissionDenied
 
 
+def _validated_filters(request):
+    form = TransferFilterForm(request.GET)
+    if not form.is_valid():
+        raise BadRequest("Filtros inválidos. Revisa los identificadores y las fechas.")
+    return form.cleaned_data
+
+
+def _locked_visible_transfer(request, uuid):
+    # Do not lock the nullable joins included by visible_transfers on PostgreSQL.
+    return get_object_or_404(
+        visible_transfers(request.user).select_related(None).select_for_update(), uuid=uuid,
+    )
+
+
 def _filtered_transfers(request):
     queryset = visible_transfers(request.user)
+    filters = _validated_filters(request)
     status = request.GET.get("status", "")
-    origin = request.GET.get("origin", "")
-    destination = request.GET.get("destination", "")
-    product = request.GET.get("product", "")
-    user = request.GET.get("user", "")
-    date_from = parse_date(request.GET.get("date_from", ""))
-    date_to = parse_date(request.GET.get("date_to", ""))
+    origin = filters["origin"]
+    destination = filters["destination"]
+    product = filters["product"]
+    user = filters["user"]
+    date_from = filters["date_from"]
+    date_to = filters["date_to"]
     query = request.GET.get("q", "").strip()
     commercial = request.GET.get("commercial", "")
     if status:
@@ -198,7 +214,7 @@ def transfer_export_csv(request):
     writer.writerow(("Código", "Estado", "Origen", "Destino", "Creado", "Recibido", "Referencia comercial"))
     for transfer in queryset.select_related("origin", "destination"):
         registration = getattr(transfer, "commercial_registration", None)
-        writer.writerow((
+        writer.writerow([_csv_text(value) for value in (
             transfer.code,
             transfer.get_status_display(),
             transfer.origin.name,
@@ -206,8 +222,15 @@ def transfer_export_csv(request):
             transfer.created_at.isoformat(),
             transfer.received_at.isoformat() if transfer.received_at else "",
             registration.external_reference if registration else "",
-        ))
+        )])
     return response
+
+
+def _csv_text(value):
+    text = str(value)
+    if text.lstrip().startswith(("=", "+", "-", "@")) or text.lstrip(" ").startswith(("\t", "\r", "\n")):
+        return "'" + text
+    return text
 
 
 @login_required
@@ -238,8 +261,9 @@ def transfer_create(request):
 
 
 @login_required
+@transaction.atomic
 def transfer_edit(request, uuid):
-    transfer = get_object_or_404(visible_transfers(request.user), uuid=uuid)
+    transfer = _locked_visible_transfer(request, uuid)
     if transfer.status != Transfer.Status.DRAFT or not request.user.is_operational or request.user.branch_id != transfer.origin_id:
         raise PermissionDenied
     if request.method == "POST":
@@ -315,10 +339,11 @@ def transfer_detail(request, uuid):
 
 
 @login_required
+@transaction.atomic
 def upload_evidence(request, uuid):
     if request.method != "POST":
         raise Http404
-    transfer = get_object_or_404(visible_transfers(request.user), uuid=uuid)
+    transfer = _locked_visible_transfer(request, uuid)
     allowed = _allowed_evidence_types(request.user, transfer)
     form = EvidenceForm(request.POST, request.FILES, allowed_types=allowed)
     return_to_receipt = request.POST.get("_return_to") == "receipt" and Evidence.Type.RECEIPT in allowed
@@ -395,13 +420,28 @@ def transfer_cancel(request, uuid):
 
 
 @login_required
-def receipt_edit(request, uuid):
+@require_POST
+def receipt_start(request, uuid):
     transfer = get_object_or_404(visible_transfers(request.user), uuid=uuid)
     try:
-        receipt = get_or_start_receipt(transfer, request.user, request=request)
+        get_or_start_receipt(transfer, request.user, request=request)
     except ValidationError as error:
         messages.error(request, _validation_message(error))
         return _transfer_flow_redirect(uuid)
+    return redirect(f"{reverse('receipt_edit', kwargs={'uuid': uuid})}?flow=1")
+
+
+@login_required
+@transaction.atomic
+def receipt_edit(request, uuid):
+    transfer = _locked_visible_transfer(request, uuid)
+    if not request.user.is_operational or request.user.branch_id != transfer.destination_id:
+        raise PermissionDenied
+    if transfer.status not in {Transfer.Status.DISPATCHED, Transfer.Status.RECEIVING}:
+        return _transfer_flow_redirect(uuid)
+    receipt = Receipt.objects.select_for_update().filter(transfer=transfer).first()
+    if receipt is None:
+        return render(request, "core/receipt_start.html", {"transfer": transfer})
     if receipt.status != receipt.Status.DRAFT:
         return _transfer_flow_redirect(uuid)
     expected_queryset = ReceiptItem.objects.filter(receipt=receipt, is_unexpected=False).select_related("product", "transfer_item")
@@ -539,6 +579,7 @@ def notifications(request):
 
 
 @login_required
+@require_POST
 def notification_open(request, pk):
     item = get_object_or_404(Notification, pk=pk, user=request.user)
     if not item.is_read:
@@ -552,8 +593,8 @@ def notification_open(request, pk):
 @login_required
 def reports(request):
     queryset = visible_transfers(request.user)
-    date_from = parse_date(request.GET.get("date_from", ""))
-    date_to = parse_date(request.GET.get("date_to", ""))
+    filters = _validated_filters(request)
+    date_from, date_to = filters["date_from"], filters["date_to"]
     if date_from:
         queryset = queryset.filter(created_at__date__gte=date_from)
     if date_to:
@@ -626,12 +667,12 @@ def reports(request):
         sent = queryset.filter(origin=branch).count()
         incoming = queryset.filter(destination=branch).count()
         received = queryset.filter(destination=branch, status__in=received_statuses).count()
-        differences = queryset.filter(destination=branch, incident__isnull=False).distinct().count()
+        differences = queryset.filter(destination=branch, status__in=received_statuses, incident__isnull=False).count()
         branch_rows.append({
             "branch": branch,
             "sent": sent,
             "incoming": incoming,
-            "pending_receipt": max(incoming - received, 0),
+            "pending_receipt": queryset.filter(destination=branch, status__in=(Transfer.Status.DISPATCHED, Transfer.Status.RECEIVING)).count(),
             "received": received,
             "differences": differences,
             "closed": queryset.filter(Q(origin=branch) | Q(destination=branch), status=Transfer.Status.CLOSED).count(),
@@ -647,7 +688,7 @@ def reports(request):
     in_transit = queryset.filter(status__in=(Transfer.Status.DISPATCHED, Transfer.Status.RECEIVING)).count()
     received_total = queryset.filter(status__in=received_statuses).count()
     closed_total = queryset.filter(status=Transfer.Status.CLOSED).count()
-    reconciled_total = queryset.filter(commercial_registration__isnull=False).count()
+    reconciled_total = queryset.filter(status__in=received_statuses, commercial_registration__isnull=False).count()
     conforming_total = queryset.filter(status__in=received_statuses, incident__isnull=True).count()
     pending_commercial = queryset.filter(
         commercial_registration__isnull=True,
@@ -707,19 +748,34 @@ def audit_list(request):
     return render(request, "core/audit_list.html", {"logs": logs.select_related("user", "branch")[:250]})
 
 
+def _save_catalog(request, form, action):
+    try:
+        with transaction.atomic():
+            item = form.save(commit=False)
+            before = snapshot(type(item).objects.get(pk=item.pk)) if item.pk else None
+            item.full_clean()
+            item.save()
+            audit(user=request.user, action=action, instance=item,
+                  description=f"Se guardó {item}.", request=request,
+                  before=before, after=snapshot(item))
+    except ValidationError as error:
+        form.add_error(None, _validation_message(error))
+        return False
+    except IntegrityError:
+        form.add_error("code", "Este código ya existe en tu empresa.")
+        return False
+    return True
+
+
 @login_required
 def manage_branches(request, pk=None):
     read_only = _company_management_access(request, pk)
     instance = get_object_or_404(Branch, pk=pk, company=request.user.company) if pk else None
-    form = BranchForm(request.POST or None, instance=instance)
+    form = BranchForm(request.POST or None, instance=instance, company=request.user.company)
     if request.method == "POST" and form.is_valid():
-        item = form.save(commit=False)
-        item.company = request.user.company
-        item.full_clean()
-        item.save()
-        audit(user=request.user, action="MANAGE_BRANCH", instance=item, description=f"Se guardó la sucursal {item}.", request=request)
-        messages.success(request, "Sucursal guardada.")
-        return redirect("manage_branches")
+        if _save_catalog(request, form, "MANAGE_BRANCH"):
+            messages.success(request, "Sucursal guardada.")
+            return redirect("manage_branches")
     return render(request, "core/manage.html", {
         "title": "Sucursales", "page_heading": "Sucursales", "page_eyebrow": "Administración empresarial", "form": form, "items": Branch.objects.filter(company=request.user.company), "edit_url_name": "manage_branch_edit", "read_only": read_only,
     })
@@ -729,15 +785,11 @@ def manage_branches(request, pk=None):
 def manage_products(request, pk=None):
     read_only = _company_management_access(request, pk)
     instance = get_object_or_404(Product, pk=pk, company=request.user.company) if pk else None
-    form = ProductForm(request.POST or None, instance=instance)
+    form = ProductForm(request.POST or None, instance=instance, company=request.user.company)
     if request.method == "POST" and form.is_valid():
-        item = form.save(commit=False)
-        item.company = request.user.company
-        item.full_clean()
-        item.save()
-        audit(user=request.user, action="MANAGE_PRODUCT", instance=item, description=f"Se guardó el producto {item}.", request=request)
-        messages.success(request, "Producto guardado.")
-        return redirect("manage_products")
+        if _save_catalog(request, form, "MANAGE_PRODUCT"):
+            messages.success(request, "Producto guardado.")
+            return redirect("manage_products")
     return render(request, "core/manage.html", {
         "title": "Productos", "page_heading": "Productos", "page_eyebrow": "Catálogo empresarial", "form": form, "import_form": ProductImportForm(), "items": Product.objects.filter(company=request.user.company), "edit_url_name": "manage_product_edit", "read_only": read_only,
     })
