@@ -113,6 +113,8 @@ class EvidenceForm(StyledFormMixin, forms.ModelForm):
         if allowed_types:
             self.fields["type"].choices = [(value, label) for value, label in Evidence.Type.choices if value in allowed_types]
         self.fields["file"].help_text = f"JPG, PNG, WEBP o PDF · máximo {settings.EVIDENCE_MAX_FILE_SIZE_MB} MB."
+        self.fields["file"].help_text += " Las fotos grandes se optimizan antes de enviarlas."
+        self.fields["file"].widget.attrs["data-max-bytes"] = settings.EVIDENCE_MAX_FILE_SIZE_MB * 1024 * 1024
         self._style_fields()
 
     def clean_file(self):

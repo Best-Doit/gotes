@@ -27,7 +27,7 @@ docker compose -f docker-compose.prod.yml up --build -d
 docker compose -f docker-compose.prod.yml exec web python manage.py createsuperuser
 ```
 
-Abre `http://IP-DEL-SERVIDOR:8009/` si se usará directamente. En ese caso configura las variables `DJANGO_SECURE_SSL_REDIRECT`, `DJANGO_SESSION_COOKIE_SECURE`, `DJANGO_CSRF_COOKIE_SECURE` y `DJANGO_TRUST_PROXY_HEADERS` en `0` hasta disponer de HTTPS.
+El puerto `8009` se publica únicamente en `127.0.0.1`. Producción requiere HTTPS mediante un proxy; el arranque se detiene si Django detecta advertencias de seguridad, salvo las opciones voluntarias de HSTS para subdominios y precarga. Genera `DJANGO_SECRET_KEY` con `python -c 'import secrets; print(secrets.token_urlsafe(64))'` y conserva esa clave entre despliegues.
 
 Para un dominio con Nginx, Caddy, Traefik o Cloudflare Tunnel, dirige el proxy a `http://127.0.0.1:8009`, conserva las opciones seguras de `.env.prod.example` y establece el dominio real en `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS` y `GOTES_PUBLIC_URL`.
 
@@ -39,7 +39,11 @@ docker compose -f docker-compose.prod.yml logs -f web email_worker
 docker compose -f docker-compose.prod.yml exec web python manage.py check --deploy
 ```
 
-Los volúmenes `gotes_postgres_data` y `gotes_media` conservan la base y las evidencias. El Compose de producción inicia una base PostgreSQL nueva; los datos existentes de SQLite no se migran automáticamente.
+Antes del arranque deben existir la red Docker externa `nr-net`, un PostgreSQL accesible como `postgres-global`, y la base y el usuario configurados en `.env`. Este Compose no crea ni respalda PostgreSQL. El volumen `gotes_media` conserva las evidencias; respalda además la base externa con su procedimiento de `pg_dump` y verifica restauraciones de ambos conjuntos. Los datos existentes de SQLite no se migran automáticamente.
+
+El proxy debe eliminar las cabeceras reenviadas del cliente y establecer `X-Forwarded-Proto` y `X-Forwarded-Host` con sus propios valores. No expongas el backend directamente. Si el proxy está en otro contenedor, debe acceder por una red privada controlada; revisa qué otros contenedores comparten `nr-net`.
+
+Al desplegar esta corrección, `migrate` aplica `0010` (retira hashes de contraseña de los snapshots de auditoría) y `0011` (crea el limitador de login). Las copias de respaldo antiguas mantienen su contenido y necesitan la política de acceso y retención correspondiente. El cambio de backend de autenticación invalida las sesiones previas: los usuarios deberán volver a iniciar sesión.
 
 ## Notificaciones por correo
 
@@ -66,6 +70,8 @@ Si `DJANGO_DEFAULT_FROM_EMAIL` queda vacío, GOTES usa automáticamente la cuent
 
 Las evidencias permiten JPG/JPEG, PNG, WEBP y PDF. El límite predeterminado es 5 MB y puede ajustarse con `GOTES_EVIDENCE_MAX_FILE_SIZE_MB`.
 
+En el navegador, las fotos grandes se convierten a JPG con un lado máximo de 1920 píxeles y un objetivo de 750 KB antes de subirlas; la evidencia guardada es esa versión optimizada. El archivo original permanece en el dispositivo. Los PDF se envían sin conversión y conservan el límite configurado. Fotos de más de 30 MB o HEIC/HEIF requieren seleccionar/exportar una imagen JPG de menor tamaño. La carga muestra progreso, espera confirmación del servidor y libera el botón si falla; después de una pérdida de conexión se debe revisar el traspaso antes de repetir el envío, porque el servidor podría haberlo guardado.
+
 ## Inicio sin Docker
 
 ```bash
@@ -85,6 +91,21 @@ Por defecto la base y los archivos se guardan dentro de `.data/`. Se pueden camb
 python manage.py check
 python manage.py test
 ```
+
+Las pruebas de concurrencia se ejecutan con PostgreSQL; SQLite no proporciona los mismos bloqueos de filas y se reserva para desarrollo. Para una verificación aislada:
+
+```bash
+docker build -t gotes-audit-fixed:local .
+bash docs/auditoria/postgres-check.sh
+```
+
+Las dependencias están fijadas con hashes en `requirements.txt`; `requirements.in` contiene los rangos de mantenimiento. Actualiza el archivo fijado con `pip-compile --generate-hashes --upgrade --output-file requirements.txt requirements.in`, revisa los cambios y ejecuta las pruebas y el análisis de dependencias antes de desplegar. Usa `.venv/bin/python` para trabajar con las versiones instaladas para este proyecto.
+
+Los dos accesos de login comparten un límite de 30 solicitudes POST por dirección del par de conexión cada 15 minutos. Puede ajustarse mediante `GOTES_LOGIN_RATE_MAX_ATTEMPTS` y `GOTES_LOGIN_RATE_WINDOW_SECONDS`. No se confía en `X-Forwarded-For`: detrás de un proxy, este límite puede compartirse entre sus usuarios. Configura además el límite por cliente en el proxy y dimensiona el límite interno para esa topología. Los intentos fallidos y rechazos se registran sin credenciales.
+
+Suspender una empresa o sucursal bloquea el acceso de sus usuarios y elimina sus sesiones en la siguiente solicitud; el superusuario técnico conserva acceso para administrar la suspensión. La recepción se inicia mediante POST con CSRF. Los filtros inválidos responden 400 y los errores de carga/catálogos se presentan en los formularios.
+
+Los activos de interfaz están versionados en `core/static/core/vendor`, con licencias y hashes en `manifest.json`; no requieren un CDN para cargar el login. Excel acepta hasta 5 MB comprimidos, 25 MB descomprimidos, 5.000 productos, 10.001 filas totales y 100 columnas. Se rechazan DTD y entidades XML.
 
 ## Interfaces
 

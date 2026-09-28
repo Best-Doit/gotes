@@ -1,0 +1,15 @@
+Found 63 test(s).
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+......Procesados: 3 · enviados: 3 · fallidos: 0
+............................................Intento de autenticación fallido.
+Intento de autenticación fallido.
+Límite de inicio de sesión alcanzado.
+.......Intento de autenticación fallido.
+Intento de autenticación fallido.
+......
+----------------------------------------------------------------------
+Ran 63 tests in 9.162s
+
+OK
+Destroying test database for alias 'default'...

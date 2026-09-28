@@ -14,4 +14,4 @@ for attempt in {1..30}; do
   if docker exec "$AUDIT_DB" pg_isready -U audit -d audit >/dev/null 2>&1; then break; fi
   sleep 1
 done
-docker run --rm --network "$AUDIT_NET" --entrypoint python -v "$PWD:/app:ro" -e POSTGRES_HOST="$AUDIT_DB" -e POSTGRES_DB=audit -e POSTGRES_USER=audit -e POSTGRES_PASSWORD=audit-only-password -e GOTES_DATA_DIR=/tmp/gotes-audit -e GOTES_MEDIA_ROOT=/tmp/gotes-audit-media -e DJANGO_DEBUG=1 gotes-web:latest manage.py test --noinput
+docker run --rm --network "$AUDIT_NET" --entrypoint python -v "$PWD:/app:ro" -e POSTGRES_HOST="$AUDIT_DB" -e POSTGRES_DB=audit -e POSTGRES_USER=audit -e POSTGRES_PASSWORD=audit-only-password -e GOTES_DATA_DIR=/tmp/gotes-audit -e GOTES_MEDIA_ROOT=/tmp/gotes-audit-media -e DJANGO_DEBUG=1 "${GOTES_TEST_IMAGE:-gotes-audit-fixed:local}" manage.py test --noinput

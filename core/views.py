@@ -6,7 +6,7 @@ from django.core.exceptions import BadRequest, PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
-from django.http import FileResponse, Http404, HttpResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -346,8 +346,10 @@ def upload_evidence(request, uuid):
     transfer = _locked_visible_transfer(request, uuid)
     allowed = _allowed_evidence_types(request.user, transfer)
     form = EvidenceForm(request.POST, request.FILES, allowed_types=allowed)
+    wants_json = request.headers.get("Accept") == "application/json"
     return_to_receipt = request.POST.get("_return_to") == "receipt" and Evidence.Type.RECEIPT in allowed
     evidence_saved = False
+    error_message = ""
     if form.is_valid() and form.cleaned_data["type"] in allowed:
         evidence = form.save(commit=False)
         evidence.transfer = transfer
@@ -359,12 +361,21 @@ def upload_evidence(request, uuid):
         if not return_to_receipt:
             messages.success(request, "Evidencia guardada.")
     else:
-        if not return_to_receipt:
-            messages.error(request, "No se pudo guardar la evidencia: " + " ".join(sum(form.errors.values(), [])))
+        error_message = " ".join(message for errors in form.errors.values() for message in errors)
+        error_message = error_message or "Ya no puedes adjuntar este tipo de evidencia en el estado actual del traspaso."
+        if not wants_json:
+            messages.error(request, "No se pudo guardar la evidencia: " + error_message)
+    if wants_json and not evidence_saved:
+        return JsonResponse({"ok": False, "error": error_message}, status=400)
     if return_to_receipt:
         step = 4 if evidence_saved else 3
         result = "evidence=1" if evidence_saved else "evidence_error=1"
-        return redirect(f"{reverse('receipt_edit', kwargs={'uuid': transfer.uuid})}?flow=1&step={step}&{result}")
+        target = f"{reverse('receipt_edit', kwargs={'uuid': transfer.uuid})}?flow=1&step={step}&{result}"
+        if wants_json:
+            return JsonResponse({"ok": True, "redirect_url": target})
+        return redirect(target)
+    if wants_json:
+        return JsonResponse({"ok": True, "redirect_url": f"{reverse('transfer_detail', kwargs={'uuid': transfer.uuid})}?flow=1"})
     return _transfer_flow_redirect(transfer.uuid)
 
 

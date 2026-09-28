@@ -19,6 +19,7 @@ from zipfile import ZipFile, ZIP_DEFLATED
 from django.apps import apps
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
+from django.core.management import call_command, CommandError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection, connections, close_old_connections
 from django.test import Client, TestCase, TransactionTestCase, override_settings, skipUnlessDBFeature
@@ -73,6 +74,55 @@ class AuditFixtures:
 
 
 class SecurityRegressionTests(AuditFixtures, TestCase):
+    def test_evidence_json_returns_saved_receipt_destination(self):
+        self.receipt()
+        self.client.force_login(self.receiver)
+        response = self.client.post(reverse('upload_evidence', args=[self.transfer.uuid]), {
+            'type': Evidence.Type.RECEIPT, '_return_to': 'receipt',
+            'file': SimpleUploadedFile('camera.jpg', b'\xff\xd8\xffcamera-proof', content_type='image/jpeg'),
+        }, HTTP_ACCEPT='application/json')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['ok'])
+        self.assertIn('step=4&evidence=1', response.json()['redirect_url'])
+        self.assertEqual(self.transfer.evidences.filter(type=Evidence.Type.RECEIPT).count(), 1)
+
+    @override_settings(EVIDENCE_MAX_FILE_SIZE_MB=1)
+    def test_evidence_json_explains_size_and_format_rejections(self):
+        self.receipt()
+        self.client.force_login(self.receiver)
+        for name, content, mime, expected in [
+            ('camera.jpg', b'\xff\xd8\xff' + b'x' * 1024 * 1024, 'image/jpeg', 'supera el límite'),
+            ('camera.heic', b'HEIC', 'image/heic', 'Formato no permitido'),
+        ]:
+            with self.subTest(name=name):
+                response = self.client.post(reverse('upload_evidence', args=[self.transfer.uuid]), {
+                    'type': Evidence.Type.RECEIPT, '_return_to': 'receipt',
+                    'file': SimpleUploadedFile(name, content, content_type=mime),
+                }, HTTP_ACCEPT='application/json')
+                self.assertEqual(response.status_code, 400)
+                self.assertFalse(response.json()['ok'])
+                self.assertIn(expected, response.json()['error'])
+        self.assertFalse(self.transfer.evidences.filter(type=Evidence.Type.RECEIPT).exists())
+
+    def test_evidence_rejection_without_javascript_preserves_reason(self):
+        self.receipt()
+        self.client.force_login(self.receiver)
+        response = self.client.post(reverse('upload_evidence', args=[self.transfer.uuid]), {
+            'type': Evidence.Type.RECEIPT, '_return_to': 'receipt',
+            'file': SimpleUploadedFile('camera.heic', b'HEIC', content_type='image/heic'),
+        }, follow=True)
+        self.assertContains(response, 'Formato no permitido')
+        self.assertFalse(self.transfer.evidences.filter(type=Evidence.Type.RECEIPT).exists())
+
+    def test_evidence_json_does_not_bypass_role_or_state_permissions(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse('upload_evidence', args=[self.transfer.uuid]), {
+            'type': Evidence.Type.DISPATCH,
+            'file': SimpleUploadedFile('camera.jpg', b'\xff\xd8\xffcamera-proof', content_type='image/jpeg'),
+        }, HTTP_ACCEPT='application/json')
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(self.transfer.evidences.exists())
+
     def test_unexpected_product_generates_incident(self):
         receipt = self.receipt()
         self.client.force_login(self.receiver)
@@ -234,6 +284,20 @@ class SecurityRegressionTests(AuditFixtures, TestCase):
         env['DJANGO_SECRET_KEY'] = 'audit-test-only-8b271fed1e5a4ae19d6196c9339fcd4e-secret'
         result = subprocess.run([sys.executable, '-c', 'from config import settings as s; assert s.SECURE_SSL_REDIRECT and s.SESSION_COOKIE_SECURE and s.CSRF_COOKIE_SECURE'], env=env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    @override_settings(
+        DEBUG=False,
+        SECRET_KEY='audit-test-only-8b271fed1e5a4ae19d6196c9339fcd4e-secret',
+        SECURE_SSL_REDIRECT=True, SESSION_COOKIE_SECURE=True, CSRF_COOKIE_SECURE=True,
+        SECURE_HSTS_SECONDS=31536000, SECURE_HSTS_INCLUDE_SUBDOMAINS=False,
+        SECURE_HSTS_PRELOAD=False,
+    )
+    def test_production_check_blocks_insecure_cookies_without_forcing_hsts_optins(self):
+        from io import StringIO
+        call_command('check_production_security', stdout=StringIO())
+        with override_settings(SESSION_COOKIE_SECURE=False):
+            with self.assertRaises(CommandError):
+                call_command('check_production_security', stdout=StringIO())
 
 
 @skipUnlessDBFeature('has_select_for_update')
